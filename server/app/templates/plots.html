@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 space-y-8">
+<div id="dynamicAtmosphereContainer" class="mx-auto max-w-7xl px-4 py-6 sm:px-6 space-y-8 transition-colors duration-700">
 
     <!-- Top Status & Hero Bar -->
     <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-white/10 pb-6">
@@ -13,12 +13,13 @@
                     SYNCING STREAM
                 </span>
             </div>
-            <p class="mt-1 text-xs text-slate-400 flex items-center gap-2">
+            <p class="mt-1 text-xs text-slate-400 flex flex-wrap items-center gap-2">
                 <span>Station: <strong class="text-slate-200">WS-001 (Direct ESP32)</strong></span>
                 <span>&bull;</span>
                 <span>Sensors: <strong class="text-cyan-400">DHT11 (Temp/Hum) + Photoresistor LDR (Light)</strong></span>
                 <span>&bull;</span>
                 <span>Updated: <span id="lastUpdatedTime" class="text-slate-200 mono-num">--:--:--</span></span>
+                <span id="lastUpdatedRelative" class="rounded bg-slate-800/80 px-1.5 py-0.5 text-[10px] font-bold text-slate-300 border border-white/5">--</span>
             </p>
         </div>
 
@@ -31,7 +32,7 @@
             </div>
 
             <!-- Unit Toggle -->
-            <button id="unitToggleBtn" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl glass-panel text-xs font-bold text-slate-200 hover:border-cyan-500/50 transition">
+            <button id="unitToggleBtn" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl glass-panel text-xs font-bold text-slate-200 hover:border-cyan-500/50 transition active:scale-95">
                 <span>Unit:</span>
                 <span id="currentUnitText" class="text-cyan-400 font-extrabold">°C</span>
             </button>
@@ -59,9 +60,9 @@
         </div>
     </div>
 
-    <!-- AI Meteorological Intelligence Hero Card -->
-    <div id="aiHeroCard" class="relative overflow-hidden rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-slate-900/90 via-slate-900/60 to-cyan-950/30 p-6 shadow-2xl glass-panel">
-        <div class="absolute -right-16 -top-16 h-64 w-64 rounded-full bg-cyan-500/10 blur-3xl pointer-events-none"></div>
+    <!-- AI Meteorological Intelligence Hero Card with Dynamic Visual Morphing -->
+    <div id="aiHeroCard" class="relative overflow-hidden rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-slate-900/90 via-slate-900/60 to-cyan-950/30 p-6 shadow-2xl glass-panel transition-all duration-700">
+        <div id="aiGlowBlob" class="absolute -right-16 -top-16 h-64 w-64 rounded-full bg-cyan-500/10 blur-3xl pointer-events-none transition-colors duration-700"></div>
         
         <div class="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 relative z-10">
             <div class="space-y-2 max-w-2xl">
@@ -69,7 +70,10 @@
                     <span id="aiBadge" class="rounded-full bg-cyan-500/20 px-3 py-1 text-xs font-extrabold tracking-wider text-cyan-300 border border-cyan-500/30 uppercase">
                         IT'S SUNNY
                     </span>
-                    <span id="aiStatus" class="text-xs text-slate-400 mono-num">AI Meteorological Analysis</span>
+                    <span id="aiTimePhaseBadge" class="rounded-full bg-slate-800/80 px-2.5 py-0.5 text-[10px] font-bold text-slate-300 border border-white/5 uppercase">
+                        DAYTIME
+                    </span>
+                    <span id="aiStatus" class="text-xs text-slate-400 mono-num">Time-Aware AI Classification</span>
                 </div>
                 <h2 id="aiHeadline" class="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
                     Optimal Mediterranean Climate
@@ -84,7 +88,7 @@
             </div>
 
             <div class="flex items-center gap-6 self-stretch sm:self-auto justify-between sm:justify-end border-t border-white/10 pt-4 lg:border-t-0 lg:pt-0">
-                <!-- Comfort Index Gauge -->
+                <!-- Comfort Index Gauge & Rating -->
                 <div class="flex flex-col items-center">
                     <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Comfort Index</span>
                     <div class="relative flex items-center justify-center">
@@ -93,6 +97,9 @@
                             <span class="text-xs text-slate-400">/100</span>
                         </div>
                     </div>
+                    <span id="aiComfortRating" class="mt-1 text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+                        OPTIMAL
+                    </span>
                 </div>
 
                 <!-- On-Demand Refresh Button -->
@@ -107,7 +114,7 @@
     <!-- Primary Sensor Metrics Grid -->
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
         
-        <!-- Temperature Card (DHT11) -->
+        <!-- Temperature Card (DHT11) with 30-min Trend Vector -->
         <div class="glass-panel glass-panel-glow rounded-2xl p-6 transition-all duration-300 relative overflow-hidden group">
             <div class="flex items-center justify-between">
                 <span class="text-xs font-bold uppercase tracking-wider text-amber-400">Temperature &middot; DHT11</span>
@@ -117,8 +124,9 @@
                 <span id="cardTemp" class="text-5xl font-black tracking-tight text-white mono-num">--</span>
                 <span id="cardTempUnit" class="text-2xl font-bold text-amber-400">°C</span>
             </div>
-            <p id="tempTrendText" class="mt-1 text-xs text-slate-400 flex items-center gap-1">
-                <span>Real-time direct acquisition</span>
+            <p id="tempTrendText" class="mt-1 text-xs text-slate-400 flex items-center gap-1.5">
+                <span id="tempTrendIcon" class="font-bold text-slate-300">&rarr;</span>
+                <span id="tempTrendDesc">Real-time direct acquisition</span>
             </p>
             <div class="mt-4 pt-3 border-t border-white/5 grid grid-cols-3 gap-2 text-[11px] mono-num text-slate-400">
                 <div>Min: <span id="tempMin" class="font-bold text-slate-200">--</span></div>
@@ -171,11 +179,12 @@
 
     <!-- Secondary / Auxiliary Metrics Grid -->
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-5">
-        <!-- Barometric Pressure -->
+        <!-- Barometric Pressure & 30-min Trend -->
         <div class="glass-panel rounded-xl p-4 flex items-center justify-between">
             <div>
                 <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Pressure</span>
                 <span id="cardPress" class="text-2xl font-extrabold text-white mono-num mt-1 block">-- hPa</span>
+                <span id="pressTrendText" class="text-[10px] text-slate-400 block mt-0.5">&rarr; Stable atmospheric link</span>
             </div>
             <div class="h-10 w-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 font-bold">
                 P
@@ -187,6 +196,7 @@
             <div>
                 <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Wind Velocity</span>
                 <span id="cardWind" class="text-2xl font-extrabold text-white mono-num mt-1 block">-- km/h</span>
+                <span id="windStatusText" class="text-[10px] text-slate-400 block mt-0.5">Direct anemometer link</span>
             </div>
             <div class="h-10 w-10 rounded-xl bg-pink-500/10 border border-pink-500/20 flex items-center justify-center text-pink-400 font-bold">
                 W
@@ -198,6 +208,7 @@
             <div>
                 <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">ESP32 Voltage / Link</span>
                 <span id="cardBatt" class="text-2xl font-extrabold text-white mono-num mt-1 block">3.30 V</span>
+                <span id="battStatusText" class="text-[10px] text-emerald-400 font-semibold block mt-0.5">● NodeMCU Regulated</span>
             </div>
             <div class="h-10 w-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 font-bold">
                 ⚡
@@ -287,6 +298,7 @@
     let wsPingTimer = null;
     let pingStartTime = 0;
     let totalPacketsReceived = 0;
+    let lastRecordDate = null;
 
     function formatNumber(val, decimals = 1) {
         if (val === null || val === undefined || isNaN(val)) return '--';
@@ -311,6 +323,96 @@
         };
     }
 
+    // 1-Second Relative Age Ticker Calculation
+    function formatRelativeAge(seconds) {
+        if (seconds < 2) return 'Just now';
+        if (seconds < 60) return `${seconds}s ago`;
+        const mins = Math.floor(seconds / 60);
+        if (mins < 60) return `${mins}m ago`;
+        const hrs = Math.floor(mins / 60);
+        return `${hrs}h ago`;
+    }
+
+    function updateLiveAgeTicker() {
+        if (!lastRecordDate) return;
+        const now = new Date();
+        const diffSec = Math.max(0, Math.round((now - lastRecordDate) / 1000));
+        
+        const badge = document.getElementById('liveStatusBadge');
+        const relSpan = document.getElementById('lastUpdatedRelative');
+
+        if (relSpan) relSpan.textContent = formatRelativeAge(diffSec);
+
+        if (badge) {
+            if (diffSec < 45) {
+                badge.innerHTML = '<span class="h-2 w-2 rounded-full bg-emerald-400 pulse-indicator"></span> LIVE STREAMING';
+                badge.className = 'inline-flex items-center gap-1.5 rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-bold text-emerald-300 border border-emerald-500/30';
+            } else {
+                badge.innerHTML = '<span class="h-2 w-2 rounded-full bg-slate-400"></span> INACTIVE (' + diffSec + 's)';
+                badge.className = 'inline-flex items-center gap-1.5 rounded-full bg-slate-500/20 px-3 py-1 text-xs font-bold text-slate-300 border border-slate-500/30';
+            }
+        }
+    }
+
+    // 30-Minute Delta Trend Calculations
+    function calculateTrend(records, key, minDelta = 0.3) {
+        if (!records || records.length < 2) return { icon: '&rarr;', text: 'Stable' };
+        const latest = records[records.length - 1];
+        const latestTs = new Date(latest.timestamp || latest.recorded_at || Date.now()).getTime();
+        const cutoffTs = latestTs - (30 * 60 * 1000); // 30 mins ago
+
+        // Find reading closest to 30 mins ago
+        let pastReading = null;
+        for (let i = records.length - 2; i >= 0; i--) {
+            const ts = new Date(records[i].timestamp || records[i].recorded_at || Date.now()).getTime();
+            if (ts <= cutoffTs || i === 0) {
+                pastReading = records[i];
+                break;
+            }
+        }
+
+        if (!pastReading || pastReading[key] == null || latest[key] == null) {
+            return { icon: '&rarr;', text: 'Stable direct acquisition' };
+        }
+
+        const delta = latest[key] - pastReading[key];
+        if (delta >= minDelta) {
+            return { icon: '&uarr;', text: `Rising (+${delta.toFixed(1)} in 30m)` };
+        } else if (delta <= -minDelta) {
+            return { icon: '&darr;', text: `Falling (${delta.toFixed(1)} in 30m)` };
+        } else {
+            return { icon: '&rarr;', text: 'Stable across 30m' };
+        }
+    }
+
+    // Dynamic Atmosphere Theming
+    function applyAtmosphericTheme(weatherType, lightPct) {
+        const hero = document.getElementById('aiHeroCard');
+        const glow = document.getElementById('aiGlowBlob');
+        const badge = document.getElementById('aiTimePhaseBadge');
+
+        if (!hero || !glow) return;
+
+        if (weatherType === 'sunset') {
+            hero.className = 'relative overflow-hidden rounded-2xl border border-rose-500/30 bg-gradient-to-br from-rose-950/40 via-purple-950/30 to-slate-950/90 p-6 shadow-2xl glass-panel transition-all duration-700';
+            glow.className = 'absolute -right-16 -top-16 h-64 w-64 rounded-full bg-rose-500/20 blur-3xl pointer-events-none transition-colors duration-700';
+            if (badge) { badge.textContent = 'GOLDEN DUSK'; badge.className = 'rounded-full bg-rose-500/20 px-2.5 py-0.5 text-[10px] font-bold text-rose-300 border border-rose-500/30 uppercase'; }
+        } else if (weatherType === 'nighttime' || (lightPct !== undefined && lightPct < 15)) {
+            hero.className = 'relative overflow-hidden rounded-2xl border border-indigo-500/30 bg-gradient-to-br from-indigo-950/40 via-slate-950/80 to-slate-950/90 p-6 shadow-2xl glass-panel transition-all duration-700';
+            glow.className = 'absolute -right-16 -top-16 h-64 w-64 rounded-full bg-indigo-500/20 blur-3xl pointer-events-none transition-colors duration-700';
+            if (badge) { badge.textContent = 'NIGHT'; badge.className = 'rounded-full bg-indigo-500/20 px-2.5 py-0.5 text-[10px] font-bold text-indigo-300 border border-indigo-500/30 uppercase'; }
+        } else if (weatherType === 'rain' || weatherType === 'thunderstorm') {
+            hero.className = 'relative overflow-hidden rounded-2xl border border-cyan-500/30 bg-gradient-to-br from-cyan-950/40 via-slate-900/80 to-slate-950/90 p-6 shadow-2xl glass-panel transition-all duration-700';
+            glow.className = 'absolute -right-16 -top-16 h-64 w-64 rounded-full bg-cyan-500/20 blur-3xl pointer-events-none transition-colors duration-700';
+            if (badge) { badge.textContent = 'PRECIPITATION'; badge.className = 'rounded-full bg-cyan-500/20 px-2.5 py-0.5 text-[10px] font-bold text-cyan-300 border border-cyan-500/30 uppercase'; }
+        } else {
+            // Sunny / Daytime
+            hero.className = 'relative overflow-hidden rounded-2xl border border-amber-500/30 bg-gradient-to-br from-amber-950/30 via-slate-900/80 to-slate-950/90 p-6 shadow-2xl glass-panel transition-all duration-700';
+            glow.className = 'absolute -right-16 -top-16 h-64 w-64 rounded-full bg-amber-500/20 blur-3xl pointer-events-none transition-colors duration-700';
+            if (badge) { badge.textContent = 'DAYTIME'; badge.className = 'rounded-full bg-amber-500/20 px-2.5 py-0.5 text-[10px] font-bold text-amber-300 border border-amber-500/30 uppercase'; }
+        }
+    }
+
     function updateDashboardUI(records) {
         if (!records || !records.length) {
             document.getElementById('lastUpdatedTime').textContent = 'Awaiting ESP32 stream...';
@@ -321,21 +423,9 @@
         
         // Timestamp handling
         const tsString = latest.timestamp ? (latest.timestamp.endsWith('Z') ? latest.timestamp : latest.timestamp + 'Z') : new Date().toISOString();
-        const dateObj = new Date(tsString);
-        document.getElementById('lastUpdatedTime').textContent = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-
-        // Update live status badge
-        const diffSec = Math.round((new Date() - dateObj) / 1000);
-        const badge = document.getElementById('liveStatusBadge');
-        if (badge) {
-            if (diffSec < 30) {
-                badge.innerHTML = '<span class="h-2 w-2 rounded-full bg-emerald-400 pulse-indicator"></span> LIVE STREAMING';
-                badge.className = 'inline-flex items-center gap-1.5 rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-bold text-emerald-300 border border-emerald-500/30';
-            } else {
-                badge.innerHTML = '<span class="h-2 w-2 rounded-full bg-slate-400"></span> IDLE (' + diffSec + 's)';
-                badge.className = 'inline-flex items-center gap-1.5 rounded-full bg-slate-500/20 px-3 py-1 text-xs font-bold text-slate-300 border border-slate-500/30';
-            }
-        }
+        lastRecordDate = new Date(tsString);
+        document.getElementById('lastUpdatedTime').textContent = lastRecordDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        updateLiveAgeTicker();
 
         // Temperature (DHT11)
         const displayTemp = convertTemp(latest.temperature);
@@ -348,6 +438,13 @@
         document.getElementById('tempMin').textContent = `${tempStats.min}${isFahrenheit ? '°F' : '°C'}`;
         document.getElementById('tempAvg').textContent = `${tempStats.avg}${isFahrenheit ? '°F' : '°C'}`;
         document.getElementById('tempMax').textContent = `${tempStats.max}${isFahrenheit ? '°F' : '°C'}`;
+
+        // Temperature 30-min Trend Vector
+        const tempTrend = calculateTrend(records, 'temperature', 0.3);
+        const tIcon = document.getElementById('tempTrendIcon');
+        const tDesc = document.getElementById('tempTrendDesc');
+        if (tIcon) tIcon.innerHTML = tempTrend.icon;
+        if (tDesc) tDesc.textContent = tempTrend.text;
 
         // Humidity (DHT11)
         document.getElementById('cardHum').textContent = formatNumber(latest.humidity);
@@ -392,10 +489,17 @@
             lightBadge.className = 'rounded-md bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-500/20';
         }
 
-        // Auxiliary metrics
+        // Auxiliary metrics & Pressure Trend
         document.getElementById('cardPress').textContent = latest.pressure != null ? `${formatNumber(latest.pressure, 0)} hPa` : '1013 hPa';
+        const pressTrend = calculateTrend(records, 'pressure', 1.0);
+        const pTrend = document.getElementById('pressTrendText');
+        if (pTrend) pTrend.innerHTML = `${pressTrend.icon} ${pressTrend.text}`;
+
         document.getElementById('cardWind').textContent = latest.wind_speed != null ? `${formatNumber(latest.wind_speed)} km/h` : 'Calm';
         document.getElementById('cardBatt').textContent = latest.batt_voltage != null ? `${formatNumber(latest.batt_voltage, 2)} V` : '3.30 V';
+
+        // Apply theme based on current light
+        applyAtmosphericTheme(latest.weather_type || 'sunny', lightVal);
     }
 
     function updateAIHero(aiData) {
@@ -404,7 +508,29 @@
         document.getElementById('aiHeadline').textContent = aiData.headline || "Atmospheric Equilibrium";
         document.getElementById('aiSummary').textContent = aiData.summary || "Real-time biometeorological conditions verified.";
         document.getElementById('aiClothing').textContent = aiData.clothing_advice || "Optimal attire suggested for local climate.";
-        document.getElementById('aiComfortScore').textContent = aiData.comfort_index || 85;
+        
+        const comfort = aiData.comfort_index || 85;
+        document.getElementById('aiComfortScore').textContent = comfort;
+
+        // Comfort Rating qualitative badge
+        const comfortBadge = document.getElementById('aiComfortRating');
+        if (comfortBadge) {
+            if (comfort >= 88) {
+                comfortBadge.textContent = 'OPTIMAL';
+                comfortBadge.className = 'mt-1 text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20';
+            } else if (comfort >= 75) {
+                comfortBadge.textContent = 'PLEASANT';
+                comfortBadge.className = 'mt-1 text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/20';
+            } else if (comfort >= 60) {
+                comfortBadge.textContent = 'WARM / HUMID';
+                comfortBadge.className = 'mt-1 text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20';
+            } else {
+                comfortBadge.textContent = 'CHILLY';
+                comfortBadge.className = 'mt-1 text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-blue-500/10 text-blue-300 border border-blue-500/20';
+            }
+        }
+
+        applyAtmosphericTheme(aiData.weather_type, undefined);
     }
 
     function buildChartOptions(color, yLabel) {
@@ -636,11 +762,11 @@
         const days = rangeSelect ? parseFloat(rangeSelect.value) : 1.0;
 
         try {
-            // Fetch latest telemetry, time-aware AI insights, and history in parallel
+            // Fetch latest telemetry, time-aware AI insights, and history in parallel with cache-busting
             const [latestRes, aiRes, histRes] = await Promise.all([
-                fetch(`/api/latest?_t=${Date.now()}`).then(r => r.json()).catch(() => null),
-                fetch(`/api/ai-analysis?_t=${Date.now()}`).then(r => r.json()).catch(() => null),
-                fetch(`/api/weather-history?days=${days}&_t=${Date.now()}`).then(r => r.json()).catch(() => null)
+                fetch(`/api/latest?_t=${Date.now()}`, { headers: { 'Cache-Control': 'no-cache' } }).then(r => r.json()).catch(() => null),
+                fetch(`/api/ai-analysis?_t=${Date.now()}`, { headers: { 'Cache-Control': 'no-cache' } }).then(r => r.json()).catch(() => null),
+                fetch(`/api/weather-history?days=${days}&_t=${Date.now()}`, { headers: { 'Cache-Control': 'no-cache' } }).then(r => r.json()).catch(() => null)
             ]);
 
             // Update latest telemetry cards & badges
@@ -683,7 +809,7 @@
 
         const url = isDays ? `/api/weather-history?days=${hoursOrDays}&_t=${Date.now()}` : `/api/history?hours=${hoursOrDays}&_t=${Date.now()}`;
         try {
-            const resp = await fetch(url);
+            const resp = await fetch(url, { headers: { 'Cache-Control': 'no-cache' } });
             const data = await resp.json();
             const list = Array.isArray(data) ? data : (data.readings || []);
             if (list.length > 0) {
@@ -786,6 +912,9 @@
         updateDashboardUI(weatherRecords);
         connectWebSocket();
 
+        // 1-second reactive ticker for relative age
+        setInterval(updateLiveAgeTicker, 1000);
+
         // Unit toggle
         const unitBtn = document.getElementById('unitToggleBtn');
         if (unitBtn) {
@@ -820,7 +949,10 @@
                 aiBtn.disabled = true;
                 aiBtn.classList.add('opacity-50');
                 try {
-                    const r = await fetch('/api/ai-analysis/refresh', { method: 'POST' });
+                    const r = await fetch('/api/ai-analysis/refresh', { 
+                        method: 'POST',
+                        headers: { 'Cache-Control': 'no-cache' }
+                    });
                     const res = await r.json();
                     if (res.analysis) {
                         updateAIHero(res.analysis);
@@ -837,7 +969,7 @@
         // Initial sync of latest AI insights and telemetry
         refreshAllDashboardData();
 
-        // Continuous 6-second background auto-refresh loop (guarantees freshness on mobile & desktop)
+        // Continuous 5-6 second background auto-refresh loop (guarantees freshness on mobile & desktop)
         setInterval(refreshAllDashboardData, 6000);
     });
 </script>
