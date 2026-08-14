@@ -47,4 +47,10 @@ venv/
 # APK Binaries
 *.apk
 release_apk/
+!WeatherStation-Release.apk
+!WeatherStation-Latest.apk
+!WeatherStation-Debug.apk
+!release_apk/
+!release_apk/*.apk
 stitch_export/
+
