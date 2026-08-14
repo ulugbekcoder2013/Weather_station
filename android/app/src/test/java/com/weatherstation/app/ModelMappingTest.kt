@@ -98,4 +98,35 @@ class ModelMappingTest {
         assertEquals(0.5f, stats.temperature.delta!!, 0.01f)
         assertEquals(120, stats.sampleCount)
     }
+
+    @Test
+    fun testHourlySlotMiddleTemperatureCalculation() {
+        val r1 = WeatherReading(1, "WS-001", 20.0f, 50f, 60f, "Moderate", "OK", "2026-08-14 14:10:00")
+        val r2 = WeatherReading(2, "WS-001", 28.0f, 50f, 60f, "Moderate", "OK", "2026-08-14 14:20:00")
+        val r3 = WeatherReading(3, "WS-001", 24.0f, 50f, 60f, "Moderate", "OK", "2026-08-14 14:40:00") // Median temp in 14:00 is 24.0
+
+        val r4 = WeatherReading(4, "WS-001", 27.0f, 50f, 60f, "Moderate", "OK", "2026-08-14 15:15:00")
+        val r5 = WeatherReading(5, "WS-001", 29.0f, 50f, 60f, "Moderate", "OK", "2026-08-14 15:45:00") // Middle temp in 15:00
+
+        val current = WeatherReading(6, "WS-001", 30.0f, 50f, 60f, "Moderate", "OK", "2026-08-14 16:05:00")
+
+        val slots = com.weatherstation.app.ui.components.extractHourlySlots(
+            readings = listOf(r1, r2, r3, r4, r5),
+            currentReading = current
+        )
+
+        // Must produce 3 distinct hourly slots: 14:00, 15:00, and current 16:00
+        assertTrue("Slots must not be empty", slots.isNotEmpty())
+        assertEquals(3, slots.size)
+
+        // First hour group: 14:00 (middle of [20.0, 24.0, 28.0] is 24.0)
+        val slot1 = slots[0]
+        assertEquals(24.0f, slot1.middleTempC, 0.01f)
+        assertEquals(3, slot1.sampleCount)
+
+        // Latest hour is marked as isLatest
+        val latestSlot = slots.last()
+        assertTrue(latestSlot.isLatest)
+        assertEquals("Hozir", latestSlot.timeLabel)
+    }
 }
