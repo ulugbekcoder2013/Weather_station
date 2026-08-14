@@ -155,32 +155,33 @@ public:
   }
 
   /**
-   * Reads raw ADC from LDR with 16-sample oversampling and EMA smoothing.
-   * Returns a 0.0 - 100.0 percentage.
+   * Reads raw ADC from LDR with 32-sample oversampling, deadband correction,
+   * and gamma perceptual linearization (gamma = 0.55) to accurately scale
+   * both indoor room lighting (300-500 lux) and outdoor sunlight (10,000+ lux).
    */
   float readLightPercentage() {
     uint32_t adcSum = 0;
-    const int OVERSAMPLE_COUNT = 16;
+    const int OVERSAMPLE_COUNT = 32;
     for (int i = 0; i < OVERSAMPLE_COUNT; i++) {
       adcSum += analogRead(ldrPin);
-      delayMicroseconds(50);
+      delayMicroseconds(40);
     }
     float rawAdc = (float)adcSum / (float)OVERSAMPLE_COUNT;
 
-    // Convert raw ADC (0..4095) to percentage (0.0%..100.0%)
-    // Standard divider: LDR connected to 3.3V, 10k resistor to GND, ADC in middle.
-    // In bright light: LDR resistance drops -> ADC voltage rises (high ADC = bright).
-    // In dark: LDR resistance rises -> ADC voltage drops (low ADC = dark).
+    // Deadband clamping to compensate for ESP32 ADC zero-zone & saturation
+    float clampedAdc = constrain(rawAdc, 40.0f, 4020.0f);
+    float normalized = (clampedAdc - 40.0f) / (4020.0f - 40.0f);
+
     #if defined(LDR_INVERT_LOGIC) && (LDR_INVERT_LOGIC == 1)
-    float pct = ((4095.0f - rawAdc) / 4095.0f) * 100.0f;
-    #else
-    float pct = (rawAdc / 4095.0f) * 100.0f;
+    normalized = 1.0f - normalized;
     #endif
 
+    // Gamma perceptual curve (Linearizes CdS logarithmic resistance power law)
+    float pct = powf(normalized, 0.55f) * 100.0f;
     pct = constrain(pct, 0.0f, 100.0f);
 
     // Exponential Moving Average (EMA) smoothing for stable live readings
-    const float EMA_ALPHA = 0.15f;
+    const float EMA_ALPHA = 0.20f;
     if (!hasInitialLdr) {
       smoothedLdrVal = pct;
       hasInitialLdr = true;
