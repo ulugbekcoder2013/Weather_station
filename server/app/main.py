@@ -39,8 +39,14 @@ logger = logging.getLogger("WeatherServer")
 # CONFIGURATION & SECURITY
 # ==============================================================================
 IS_PRODUCTION = os.environ.get("FLASK_ENV", "").lower() == "production" or os.environ.get("ENVIRONMENT", "").lower() == "production"
-API_KEY = os.environ.get("API_KEY_DEVICE") or os.environ.get("SECRET_KEY") or os.environ.get("API_KEY") or "ws_secret_key_2026_secure"
-FALLBACK_KEYS = {API_KEY, "ws_secret_key_2026_secure", "weather-station-development-key"}
+FALLBACK_KEYS = {
+    API_KEY,
+    "ws_secret_key_2026_secure",
+    "weather-station-development-key",
+    "weather_secret_key",
+    "esp32_secret",
+    "esp32_device_key"
+}
 
 # Initialize database schema
 init_db()

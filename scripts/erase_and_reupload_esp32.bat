@@ -1,6 +1,7 @@
 @echo off
-set ARDUINO_CLI=c:\Users\Alish\Desktop\School\IT\projects\Weather_station\tools\arduino-cli\arduino-cli.exe
-set SKETCH_DIR=c:\Users\Alish\Desktop\School\IT\projects\Weather_station\firmware\esp32_gateway
+set PROJECT_DIR=%~dp0..
+set ARDUINO_CLI=%PROJECT_DIR%\tools\arduino-cli\arduino-cli.exe
+set SKETCH_DIR=%PROJECT_DIR%\firmware\esp32_gateway
 set FQBN=esp32:esp32:esp32
 set PORT=COM3
 
