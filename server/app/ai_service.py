@@ -70,23 +70,24 @@ def set_cached_ai_analysis(data: dict):
         _latest_ai_cache.update(data)
 
 def _get_time_context(reading_dict: dict) -> tuple:
-    """Extracts local time, hour, and descriptive astronomical time context."""
+    """
+    Extracts local time in Uzbekistan (Asia/Tashkent UTC+5), hour, and descriptive astronomical time context.
+    Raw database timestamps are in UTC and are converted accurately with +5 hours offset.
+    """
     now_utc = utc_now()
     recorded_at = reading_dict.get('recorded_at') or reading_dict.get('timestamp')
     
     local_dt = now_utc + timedelta(hours=5)
     if recorded_at:
         try:
-            ts_str = str(recorded_at)
+            ts_str = str(recorded_at).strip()
             if 'T' in ts_str:
                 ts_clean = ts_str.replace('Z', '')
                 parsed = datetime.fromisoformat(ts_clean)
-                if ts_str.endswith('Z'):
-                    local_dt = parsed + timedelta(hours=5)
-                else:
-                    local_dt = parsed
+                local_dt = parsed + timedelta(hours=5)
             elif ' ' in ts_str:
-                local_dt = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
+                parsed = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
+                local_dt = parsed + timedelta(hours=5)
         except Exception:
             pass
 
@@ -99,7 +100,7 @@ def _get_time_context(reading_dict: dict) -> tuple:
     elif hour < 8:
         context = "Early Dawn / Sunrise"
     elif hour < 12:
-        context = "Morning"
+        context = "Morning Daylight"
     elif hour < 17:
         context = "Midday / Afternoon"
     elif hour < 20:
@@ -107,7 +108,7 @@ def _get_time_context(reading_dict: dict) -> tuple:
     elif hour < 22:
         context = "Evening Twilight"
     else:
-        context = "Nighttime"
+        context = "Nocturnal Nighttime"
 
     return local_dt, hour, time_str, context
 
@@ -232,6 +233,10 @@ def perform_ai_analysis(reading_dict: dict) -> dict:
                         else:
                             raise ValueError("Empty message content returned by model.")
 
+                        local_dt, _, time_str, time_context = _get_time_context(reading_dict)
+                        parsed['time_str'] = time_str
+                        parsed['time_context'] = time_context
+                        parsed['local_time'] = local_dt.strftime("%Y-%m-%d %H:%M:%S")
                         parsed['analyzed_at'] = utc_now().isoformat() + "Z"
                         parsed['model'] = model_name
                         parsed['status'] = "success"
@@ -294,7 +299,7 @@ def _heuristic_fallback(reading: dict) -> dict:
     hum = reading.get('humidity', 50.0)
     sun = reading.get('sun_activity', 50.0)
     
-    _, hour, time_str, time_context = _get_time_context(reading)
+    local_dt, _, time_str, time_context = _get_time_context(reading)
 
     if wtype == "nighttime":
         if temp >= 24.0:
@@ -354,7 +359,7 @@ def _heuristic_fallback(reading: dict) -> dict:
     elif wtype == "thunderstorm":
         label = "THUNDERSTORM"
         headline = f"Atmospheric Storm Alert ({time_str})"
-        summary = f"At {time_str} ({time_context}), heavy precipitation with storm moisture ({hum:.1f}%) and ambient {temp:.1f}°C."
+        summary = f"At {time_str} ({time_context}), heavy precipitation with storm moisture ({hum:.1f}% humidity) and ambient {temp:.1f}°C."
         advice = "Seek indoor shelter; avoid open exposed areas during active precipitation."
         comfort = 40
 
@@ -379,6 +384,9 @@ def _heuristic_fallback(reading: dict) -> dict:
         "summary": summary,
         "clothing_advice": advice,
         "comfort_index": comfort,
+        "time_str": time_str,
+        "time_context": time_context,
+        "local_time": local_dt.strftime("%Y-%m-%d %H:%M:%S"),
         "analyzed_at": utc_now().isoformat() + "Z",
         "model": "heuristic_time_aware",
         "status": "fallback"
@@ -446,6 +454,8 @@ class AIBackgroundScheduler:
                         clothing_advice=analysis.get('clothing_advice', ''),
                         comfort_index=int(analysis.get('comfort_index', 85)),
                         model_used=analysis.get('model', OPENROUTER_MODEL),
+                        time_context=analysis.get('time_context', ''),
+                        local_time=analysis.get('local_time', ''),
                         timestamp=utc_now()
                     )
                     db.add(record)

@@ -3,7 +3,7 @@ Smart Home Weather Station — SQLAlchemy Data Models
 High-performance database entities for physical sensor telemetry and AI analysis.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from sqlalchemy import Column, Integer, Float, String, Boolean, DateTime, Text, Index
 from sqlalchemy.orm import declarative_base
 
@@ -73,10 +73,13 @@ class AIAnalysis(Base):
     clothing_advice = Column(Text, nullable=True)
     comfort_index = Column(Integer, nullable=False, default=85)
     model_used = Column(String(64), nullable=True)
+    time_context = Column(String(64), nullable=True)
+    local_time = Column(String(32), nullable=True)
     timestamp = Column(DateTime, default=utc_now, nullable=False, index=True)
 
     def to_dict(self) -> dict:
         ts = self.timestamp or utc_now()
+        local_ts = ts + timedelta(hours=5)
         time_str = ts.strftime("%Y-%m-%d %H:%M:%S")
         time_iso = ts.strftime("%Y-%m-%dT%H:%M:%SZ")
         return {
@@ -88,6 +91,8 @@ class AIAnalysis(Base):
             "clothing_advice": self.clothing_advice,
             "comfort_index": self.comfort_index,
             "model": self.model_used,
+            "time_context": self.time_context,
+            "local_time": self.local_time or local_ts.strftime("%Y-%m-%d %H:%M:%S"),
             "recorded_at": time_str,
             "timestamp": time_iso
         }

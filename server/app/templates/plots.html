@@ -509,6 +509,15 @@
         document.getElementById('aiSummary').textContent = aiData.summary || "Real-time biometeorological conditions verified.";
         document.getElementById('aiClothing').textContent = aiData.clothing_advice || "Optimal attire suggested for local climate.";
         
+        if (aiData.time_context) {
+            const timeBadge = document.getElementById('aiTimePhaseBadge');
+            if (timeBadge) timeBadge.textContent = aiData.time_context.toUpperCase();
+        }
+        if (aiData.local_time || aiData.time_str) {
+            const statusEl = document.getElementById('aiStatus');
+            if (statusEl) statusEl.textContent = `Analyzed at ${aiData.time_str || aiData.local_time}`;
+        }
+
         const comfort = aiData.comfort_index || 85;
         document.getElementById('aiComfortScore').textContent = comfort;
 

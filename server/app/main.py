@@ -432,6 +432,26 @@ async def handle_weather_ingest(request: Request, db: Session = Depends(get_db))
         # Immediate time-aware AI classification on every fresh telemetry frame
         fresh_ai = perform_ai_analysis(entry_dict)
 
+        # Persist AI meteorological analysis to SQLite database
+        try:
+            ai_record = AIAnalysis(
+                weather_type=fresh_ai.get("weather_type", "sunny"),
+                vertical_label=fresh_ai.get("vertical_label", "IT'S SUNNY"),
+                headline=fresh_ai.get("headline", ""),
+                summary=fresh_ai.get("summary", ""),
+                clothing_advice=fresh_ai.get("clothing_advice", ""),
+                comfort_index=int(fresh_ai.get("comfort_index", 85)),
+                model_used=fresh_ai.get("model", OPENROUTER_MODEL),
+                time_context=fresh_ai.get("time_context", ""),
+                local_time=fresh_ai.get("local_time", ""),
+                timestamp=utc_now()
+            )
+            db.add(ai_record)
+            db.commit()
+        except Exception as ai_err:
+            db.rollback()
+            logger.warning(f"Could not persist immediate AI record: {ai_err}")
+
         # Real-time WebSocket & SSE broadcast
         broadcast_packet = {
             "type": "telemetry_update",
@@ -725,6 +745,8 @@ async def refresh_ai_analysis(request: Request, db: Session = Depends(get_db)):
             clothing_advice=analysis.get("clothing_advice", ""),
             comfort_index=int(analysis.get("comfort_index", 85)),
             model_used=analysis.get("model", OPENROUTER_MODEL),
+            time_context=analysis.get("time_context", ""),
+            local_time=analysis.get("local_time", ""),
             timestamp=utc_now()
         )
         db.add(record)
