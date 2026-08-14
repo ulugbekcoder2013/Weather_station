@@ -6,12 +6,13 @@
 
 class StationWiFiManager {
 private:
+  static const unsigned long INITIAL_BACKOFF = 8000;   // 8s for Wi-Fi association
+  static const unsigned long MAX_BACKOFF     = 60000;  // 60s max backoff
+
   const char* ssid;
   const char* password;
   unsigned long lastReconnectAttempt;
   unsigned long currentBackoffDelay;
-  const unsigned long INITIAL_BACKOFF = 8000;   // 8s for association
-  const unsigned long MAX_BACKOFF     = 60000;  // 60s
   bool ntpSynchronized;
 
 public:
@@ -46,9 +47,10 @@ public:
       ntpSynchronized = false;
       unsigned long now = millis();
       if (now - lastReconnectAttempt >= currentBackoffDelay) {
-        Serial.print(F("[WIFI] Attempting connection to "));
+        lastReconnectAttempt = now;
+        Serial.print(F("[WIFI] Connection retry for "));
         Serial.print(ssid);
-        Serial.print(F(" (retry in "));
+        Serial.print(F(" (next in "));
         Serial.print(currentBackoffDelay / 1000);
         Serial.println(F("s)..."));
         
@@ -102,6 +104,13 @@ public:
       // Fallback relative timestamp if NTP is not yet synced
       snprintf(outBuf, maxLen, "1970-01-01 00:00:00");
     }
+  }
+
+  int getRssi() {
+    if (isConnected()) {
+      return WiFi.RSSI();
+    }
+    return 0;
   }
 };
 

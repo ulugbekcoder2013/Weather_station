@@ -110,23 +110,38 @@ private:
     // data[1]: Humidity decimal (usually 0 for DHT11)
     // data[2]: Temperature integer
     // data[3]: Temperature decimal (usually 0 for DHT11)
-    float hum = (float)data[0] + ((float)data[1] * 0.1f);
-    float temp = (float)data[2] + ((float)data[3] * 0.1f);
+    float rawHum = (float)data[0] + ((float)data[1] * 0.1f);
+    float rawTemp = (float)data[2] + ((float)data[3] * 0.1f);
 
-    // Sanity range check for DHT11
-    if (temp < -10.0f || temp > 60.0f || hum < 5.0f || hum > 100.0f) {
+    // Apply thermal calibration offset (compensating for ESP32 proximity heat)
+    #if defined(TEMPERATURE_OFFSET_C)
+    float calTemp = rawTemp + (float)(TEMPERATURE_OFFSET_C);
+    #else
+    float calTemp = rawTemp;
+    #endif
+
+    #if defined(HUMIDITY_OFFSET_PCT)
+    float calHum = rawHum + (float)(HUMIDITY_OFFSET_PCT);
+    #else
+    float calHum = rawHum;
+    #endif
+
+    calHum = constrain(calHum, 0.0f, 100.0f);
+
+    // Sanity range check
+    if (calTemp < -40.0f || calTemp > 85.0f || calHum < 0.0f || calHum > 100.0f) {
       return false;
     }
 
-    outHum = hum;
-    outTemp = temp;
+    outHum = calHum;
+    outTemp = calTemp;
     return true;
   }
 
 public:
   DirectSensorManager(uint8_t dht_pin = DHT11_PIN, uint8_t ldr_pin = LDR_PIN)
     : dhtPin(dht_pin), ldrPin(ldr_pin), lastDhtReadMs(0),
-      lastValidTemp(22.0f), lastValidHum(50.0f), smoothedLdrVal(0.0f),
+      lastValidTemp(24.0f), lastValidHum(45.0f), smoothedLdrVal(0.0f),
       hasInitialLdr(false), totalSamples(0), dhtErrors(0) {}
 
   void begin() {

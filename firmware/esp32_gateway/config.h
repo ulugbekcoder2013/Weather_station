@@ -24,7 +24,13 @@
 #define LDR_PIN                 34    // ESP32 GPIO 34 / ADC1_CH6 (Voltage divider with 10k resistor to GND)
 #define LDR_INVERT_LOGIC        0     // 0 = standard divider (bright = high voltage), 1 = inverted
 
-// 4. Real-Time Telemetry Streaming Rate
+// 4. Sensor Calibration & Thermal Offset Compensation
+// ESP32 SoC and 3.3V voltage regulator dissipate heat (~3-7°C) into breadboards/enclosures.
+// Adjust this offset to match your room's ambient reference thermometer.
+#define TEMPERATURE_OFFSET_C    -6.0f // Temperature offset in °C (e.g. -6.0 to compensate for ESP32 proximity heat)
+#define HUMIDITY_OFFSET_PCT     0.0f  // Humidity offset in %
+
+// 5. Real-Time Telemetry Streaming Rate
 #define LIVE_STREAM_INTERVAL_MS 2000  // Stream real-time telemetry frame every 2 seconds (hyper-fast live updates)
 
 // 5. Offline Buffer & Resilience Settings
