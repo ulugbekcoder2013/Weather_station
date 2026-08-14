@@ -35,16 +35,17 @@ class WeatherData(Base):
         time_iso = ts.strftime("%Y-%m-%dT%H:%M:%SZ")
         time_str = ts.strftime("%Y-%m-%d %H:%M:%S")
 
-        light_val = round(self.sun_activity, 1)
+        light_val = round(self.sun_activity, 1) if self.sun_activity is not None else 0.0
         light_cond = "Bright Sunlight" if light_val > 70 else ("Dim / Low Light" if light_val < 25 else "Moderate Light")
-        hum_val = round(self.humidity, 1)
+        hum_val = round(self.humidity, 1) if self.humidity is not None else 0.0
         hum_cond = "Humid" if hum_val > 65 else ("Dry" if hum_val < 30 else "Optimal Comfort")
+        temp_val = round(self.temperature, 2) if self.temperature is not None else 0.0
 
         return {
             "id": self.id,
-            "device_id": self.device_id,
-            "temperature": round(self.temperature, 2),
-            "temperature_c": round(self.temperature, 2),
+            "device_id": self.device_id or "WS-001",
+            "temperature": temp_val,
+            "temperature_c": temp_val,
             "humidity": hum_val,
             "humidity_pct": hum_val,
             "sun_activity": light_val,
@@ -52,7 +53,7 @@ class WeatherData(Base):
             "wind_speed": round(self.wind_speed * 3.6, 2) if self.wind_speed is not None else None,
             "pressure": round(self.pressure, 1) if self.pressure is not None else None,
             "batt_voltage": round(self.batt_voltage, 2) if self.batt_voltage is not None else None,
-            "rain_detected": self.rain_detected,
+            "rain_detected": bool(self.rain_detected) if self.rain_detected is not None else False,
             "sensor_source": "DHT11 (Temp/Hum) + LDR (Light)",
             "recorded_at": time_str,
             "timestamp": time_iso,

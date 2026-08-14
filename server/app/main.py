@@ -587,26 +587,26 @@ async def get_weather_stats(
             "count": 0
         }
 
-    temps = [w.temperature for w in data]
-    hums = [w.humidity for w in data]
-    suns = [w.sun_activity for w in data]
+    temps = [w.temperature for w in data if w.temperature is not None]
+    hums = [w.humidity for w in data if w.humidity is not None]
+    suns = [w.sun_activity for w in data if w.sun_activity is not None]
     pressures = [w.pressure for w in data if w.pressure is not None]
 
     stats = {
         "temperature": {
-            "min": round(min(temps), 2),
-            "max": round(max(temps), 2),
-            "avg": round(sum(temps) / len(temps), 2)
+            "min": round(min(temps), 2) if temps else 0.0,
+            "max": round(max(temps), 2) if temps else 0.0,
+            "avg": round(sum(temps) / len(temps), 2) if temps else 0.0
         },
         "humidity": {
-            "min": round(min(hums), 1),
-            "max": round(max(hums), 1),
-            "avg": round(sum(hums) / len(hums), 1)
+            "min": round(min(hums), 1) if hums else 0.0,
+            "max": round(max(hums), 1) if hums else 0.0,
+            "avg": round(sum(hums) / len(hums), 1) if hums else 0.0
         },
         "light": {
-            "min": round(min(suns), 1),
-            "max": round(max(suns), 1),
-            "avg": round(sum(suns) / len(suns), 1)
+            "min": round(min(suns), 1) if suns else 0.0,
+            "max": round(max(suns), 1) if suns else 0.0,
+            "avg": round(sum(suns) / len(suns), 1) if suns else 0.0
         },
         "pressure": ({
             "min": round(min(pressures), 1),
