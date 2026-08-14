@@ -1,0 +1,30 @@
+<resources>
+    <string name="app_name">Weather Station</string>
+    <string name="title_home">Now</string>
+    <string name="title_trends">Trends</string>
+    <string name="title_summary">Summary</string>
+    <string name="title_device">Device</string>
+    <string name="title_settings">Settings</string>
+
+    <!-- Sensors -->
+    <string name="sensor_dht11_temp">DHT11 Temperature</string>
+    <string name="sensor_lm35">DHT11 Temperature</string>
+    <string name="sensor_dht11">DHT11 Humidity</string>
+    <string name="sensor_ldr">LDR Ambient Light</string>
+
+    <!-- Units -->
+    <string name="unit_celsius">°C</string>
+    <string name="unit_fahrenheit">°F</string>
+    <string name="unit_percent">%</string>
+
+    <!-- Status & Alerts -->
+    <string name="status_live">LIVE</string>
+    <string name="status_stale">STALE DATA (OFFLINE)</string>
+    <string name="status_degraded">DEGRADED</string>
+    <string name="status_offline">OFFLINE</string>
+    <string name="retry">Retry</string>
+    <string name="last_updated">Last updated: %1$s</string>
+
+    <!-- Widget -->
+    <string name="widget_description">Live indoor and ambient environmental readings.</string>
+</resources>

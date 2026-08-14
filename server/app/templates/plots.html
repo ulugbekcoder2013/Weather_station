@@ -1,0 +1,794 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 space-y-8">
+
+    <!-- Top Status & Hero Bar -->
+    <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-white/10 pb-6">
+        <div>
+            <div class="flex items-center gap-3">
+                <h1 class="text-3xl font-extrabold tracking-tight text-white">Live Environmental Telemetry</h1>
+                <span id="liveStatusBadge" class="inline-flex items-center gap-1.5 rounded-full bg-amber-500/20 px-3 py-1 text-xs font-bold text-amber-300 border border-amber-500/30">
+                    <span class="h-2 w-2 rounded-full bg-amber-400 animate-pulse"></span>
+                    SYNCING STREAM
+                </span>
+            </div>
+            <p class="mt-1 text-xs text-slate-400 flex items-center gap-2">
+                <span>Station: <strong class="text-slate-200">WS-001 (Direct ESP32)</strong></span>
+                <span>&bull;</span>
+                <span>Sensors: <strong class="text-cyan-400">DHT11 (Temp/Hum) + Photoresistor LDR (Light)</strong></span>
+                <span>&bull;</span>
+                <span>Updated: <span id="lastUpdatedTime" class="text-slate-200 mono-num">--:--:--</span></span>
+            </p>
+        </div>
+
+        <!-- Controls: Time Range, Temp Unit, Latency HUD -->
+        <div class="flex flex-wrap items-center gap-3 w-full md:w-auto">
+            <!-- Latency HUD -->
+            <div class="flex items-center gap-2 px-3 py-1.5 rounded-xl glass-panel text-xs text-slate-300">
+                <span class="text-slate-500">Latency:</span>
+                <span id="latencyMs" class="mono-num font-bold text-emerald-400">-- ms</span>
+            </div>
+
+            <!-- Unit Toggle -->
+            <button id="unitToggleBtn" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl glass-panel text-xs font-bold text-slate-200 hover:border-cyan-500/50 transition">
+                <span>Unit:</span>
+                <span id="currentUnitText" class="text-cyan-400 font-extrabold">°C</span>
+            </button>
+
+            <!-- Time Range Selector -->
+            <div class="flex items-center gap-2 px-3 py-1.5 rounded-xl glass-panel text-xs text-slate-300">
+                <span class="text-slate-500 font-medium">Range:</span>
+                <select id="timeRangeSelect" class="bg-transparent font-bold text-slate-100 focus:outline-none cursor-pointer">
+                    <option value="1" class="bg-slate-900" selected>Last 24 Hours</option>
+                    <option value="0.04" class="bg-slate-900">Last 1 Hour</option>
+                    <option value="0.25" class="bg-slate-900">Last 6 Hours</option>
+                    <option value="3" class="bg-slate-900">Last 3 Days</option>
+                    <option value="7" class="bg-slate-900">Last 7 Days</option>
+                    <option value="30" class="bg-slate-900">Last 30 Days</option>
+                </select>
+            </div>
+
+            <!-- Manual Refresh / Sync Button -->
+            <button id="refreshBtn" class="flex items-center gap-2 px-4 py-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 text-slate-950 text-xs font-extrabold shadow-lg shadow-cyan-500/20 hover:opacity-95 active:scale-95 transition">
+                <svg id="refreshSpinner" class="w-3.5 h-3.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                </svg>
+                SYNC
+            </button>
+        </div>
+    </div>
+
+    <!-- AI Meteorological Intelligence Hero Card -->
+    <div id="aiHeroCard" class="relative overflow-hidden rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-slate-900/90 via-slate-900/60 to-cyan-950/30 p-6 shadow-2xl glass-panel">
+        <div class="absolute -right-16 -top-16 h-64 w-64 rounded-full bg-cyan-500/10 blur-3xl pointer-events-none"></div>
+        
+        <div class="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 relative z-10">
+            <div class="space-y-2 max-w-2xl">
+                <div class="flex items-center gap-2.5">
+                    <span id="aiBadge" class="rounded-full bg-cyan-500/20 px-3 py-1 text-xs font-extrabold tracking-wider text-cyan-300 border border-cyan-500/30 uppercase">
+                        IT'S SUNNY
+                    </span>
+                    <span id="aiStatus" class="text-xs text-slate-400 mono-num">AI Meteorological Analysis</span>
+                </div>
+                <h2 id="aiHeadline" class="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
+                    Optimal Mediterranean Climate
+                </h2>
+                <p id="aiSummary" class="text-sm text-slate-300 leading-relaxed">
+                    Clear radiant skies with abundant solar irradiance and balanced ambient thermal levels.
+                </p>
+                <div class="flex items-center gap-2 pt-2 text-xs text-cyan-200">
+                    <svg class="w-4 h-4 text-cyan-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    <span id="aiClothing">Comfortable light attire and sunglasses recommended.</span>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-6 self-stretch sm:self-auto justify-between sm:justify-end border-t border-white/10 pt-4 lg:border-t-0 lg:pt-0">
+                <!-- Comfort Index Gauge -->
+                <div class="flex flex-col items-center">
+                    <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Comfort Index</span>
+                    <div class="relative flex items-center justify-center">
+                        <div class="text-center">
+                            <span id="aiComfortScore" class="text-3xl sm:text-4xl font-black mono-num text-emerald-400">92</span>
+                            <span class="text-xs text-slate-400">/100</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- On-Demand Refresh Button -->
+                <button id="aiAnalyzeBtn" class="flex flex-col items-center justify-center px-4 py-3 rounded-xl border border-cyan-500/30 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 text-xs font-bold transition active:scale-95">
+                    <svg class="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/></svg>
+                    <span>Analyze</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Primary Sensor Metrics Grid -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+        
+        <!-- Temperature Card (DHT11) -->
+        <div class="glass-panel glass-panel-glow rounded-2xl p-6 transition-all duration-300 relative overflow-hidden group">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-bold uppercase tracking-wider text-amber-400">Temperature &middot; DHT11</span>
+                <span class="rounded-md bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-400 border border-amber-500/20">DIGITAL</span>
+            </div>
+            <div class="mt-4 flex items-baseline gap-2">
+                <span id="cardTemp" class="text-5xl font-black tracking-tight text-white mono-num">--</span>
+                <span id="cardTempUnit" class="text-2xl font-bold text-amber-400">°C</span>
+            </div>
+            <p id="tempTrendText" class="mt-1 text-xs text-slate-400 flex items-center gap-1">
+                <span>Real-time direct acquisition</span>
+            </p>
+            <div class="mt-4 pt-3 border-t border-white/5 grid grid-cols-3 gap-2 text-[11px] mono-num text-slate-400">
+                <div>Min: <span id="tempMin" class="font-bold text-slate-200">--</span></div>
+                <div>Avg: <span id="tempAvg" class="font-bold text-slate-200">--</span></div>
+                <div>Max: <span id="tempMax" class="font-bold text-slate-200">--</span></div>
+            </div>
+        </div>
+
+        <!-- Relative Humidity Card (DHT11) -->
+        <div class="glass-panel glass-panel-glow rounded-2xl p-6 transition-all duration-300 relative overflow-hidden group">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-bold uppercase tracking-wider text-cyan-400">Relative Humidity &middot; DHT11</span>
+                <span id="humConditionBadge" class="rounded-md bg-cyan-500/10 px-2 py-0.5 text-[10px] font-bold text-cyan-400 border border-cyan-500/20">OPTIMAL</span>
+            </div>
+            <div class="mt-4 flex items-baseline gap-2">
+                <span id="cardHum" class="text-5xl font-black tracking-tight text-white mono-num">--</span>
+                <span class="text-2xl font-bold text-cyan-400">%</span>
+            </div>
+            <p id="humStatusText" class="mt-1 text-xs text-slate-400">
+                Moisture level in ambient air
+            </p>
+            <div class="mt-4 pt-3 border-t border-white/5 grid grid-cols-3 gap-2 text-[11px] mono-num text-slate-400">
+                <div>Min: <span id="humMin" class="font-bold text-slate-200">--</span></div>
+                <div>Avg: <span id="humAvg" class="font-bold text-slate-200">--</span></div>
+                <div>Max: <span id="humMax" class="font-bold text-slate-200">--</span></div>
+            </div>
+        </div>
+
+        <!-- Sunlight / Light Intensity (Photoresistor LDR) -->
+        <div class="glass-panel glass-panel-glow rounded-2xl p-6 transition-all duration-300 relative overflow-hidden group">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-bold uppercase tracking-wider text-emerald-400">Light Intensity &middot; Photoresistor LDR</span>
+                <span id="lightConditionBadge" class="rounded-md bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-500/20">SUNNY</span>
+            </div>
+            <div class="mt-4 flex items-baseline gap-2">
+                <span id="cardLight" class="text-5xl font-black tracking-tight text-white mono-num">--</span>
+                <span class="text-2xl font-bold text-emerald-400">%</span>
+            </div>
+            <p id="lightStatusText" class="mt-1 text-xs text-slate-400">
+                12-bit ADC oversampled with EMA smoothing
+            </p>
+            <div class="mt-4 pt-3 border-t border-white/5 grid grid-cols-3 gap-2 text-[11px] mono-num text-slate-400">
+                <div>Min: <span id="lightMin" class="font-bold text-slate-200">--</span></div>
+                <div>Avg: <span id="lightAvg" class="font-bold text-slate-200">--</span></div>
+                <div>Max: <span id="lightMax" class="font-bold text-slate-200">--</span></div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Secondary / Auxiliary Metrics Grid -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-5">
+        <!-- Barometric Pressure -->
+        <div class="glass-panel rounded-xl p-4 flex items-center justify-between">
+            <div>
+                <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Pressure</span>
+                <span id="cardPress" class="text-2xl font-extrabold text-white mono-num mt-1 block">-- hPa</span>
+            </div>
+            <div class="h-10 w-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 font-bold">
+                P
+            </div>
+        </div>
+
+        <!-- Wind Velocity -->
+        <div class="glass-panel rounded-xl p-4 flex items-center justify-between">
+            <div>
+                <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Wind Velocity</span>
+                <span id="cardWind" class="text-2xl font-extrabold text-white mono-num mt-1 block">-- km/h</span>
+            </div>
+            <div class="h-10 w-10 rounded-xl bg-pink-500/10 border border-pink-500/20 flex items-center justify-center text-pink-400 font-bold">
+                W
+            </div>
+        </div>
+
+        <!-- ESP32 Power / Battery -->
+        <div class="glass-panel rounded-xl p-4 flex items-center justify-between">
+            <div>
+                <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">ESP32 Voltage / Link</span>
+                <span id="cardBatt" class="text-2xl font-extrabold text-white mono-num mt-1 block">3.30 V</span>
+            </div>
+            <div class="h-10 w-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 font-bold">
+                ⚡
+            </div>
+        </div>
+    </div>
+
+    <!-- Real-Time Interactive Charts Section -->
+    <div class="space-y-6">
+        <div class="flex items-center justify-between">
+            <h2 class="text-xl font-bold tracking-tight text-white flex items-center gap-2">
+                <span>Real-Time Environmental Trends</span>
+                <span class="h-2 w-2 rounded-full bg-emerald-400 pulse-indicator"></span>
+            </h2>
+            <span class="text-xs text-slate-400">Continuous 60fps streaming</span>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            
+            <!-- Temperature Chart -->
+            <div class="glass-panel rounded-2xl p-5 shadow-xl">
+                <div class="flex items-center justify-between mb-4">
+                    <span class="text-sm font-bold text-slate-200 flex items-center gap-2">
+                        <span class="h-2.5 w-2.5 rounded-full bg-amber-400"></span>
+                        Temperature Trend (DHT11)
+                    </span>
+                    <span id="tempCurrentChartLabel" class="text-xs font-bold text-amber-400 mono-num">-- °C</span>
+                </div>
+                <div class="relative h-72">
+                    <canvas id="tempChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Humidity Chart -->
+            <div class="glass-panel rounded-2xl p-5 shadow-xl">
+                <div class="flex items-center justify-between mb-4">
+                    <span class="text-sm font-bold text-slate-200 flex items-center gap-2">
+                        <span class="h-2.5 w-2.5 rounded-full bg-cyan-400"></span>
+                        Relative Humidity Trend (DHT11)
+                    </span>
+                    <span id="humCurrentChartLabel" class="text-xs font-bold text-cyan-400 mono-num">-- %</span>
+                </div>
+                <div class="relative h-72">
+                    <canvas id="humChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Sunlight / Light Intensity Chart -->
+            <div class="glass-panel rounded-2xl p-5 shadow-xl">
+                <div class="flex items-center justify-between mb-4">
+                    <span class="text-sm font-bold text-slate-200 flex items-center gap-2">
+                        <span class="h-2.5 w-2.5 rounded-full bg-emerald-400"></span>
+                        Sunlight &amp; Ambient Light (Photoresistor LDR)
+                    </span>
+                    <span id="lightCurrentChartLabel" class="text-xs font-bold text-emerald-400 mono-num">-- %</span>
+                </div>
+                <div class="relative h-72">
+                    <canvas id="lightChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Combined Composite Telemetry Chart -->
+            <div class="glass-panel rounded-2xl p-5 shadow-xl">
+                <div class="flex items-center justify-between mb-4">
+                    <span class="text-sm font-bold text-slate-200 flex items-center gap-2">
+                        <span class="h-2.5 w-2.5 rounded-full bg-purple-400"></span>
+                        Atmospheric Multichannel Correlation
+                    </span>
+                    <span class="text-xs text-slate-400">Normalized Index</span>
+                </div>
+                <div class="relative h-72">
+                    <canvas id="compositeChart"></canvas>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+</div>
+
+<!-- Real-Time WebSocket & Dashboard Controller -->
+<script>
+    let weatherRecords = {{ weather_list|tojson }};
+    let charts = {};
+    let isFahrenheit = false;
+    let ws = null;
+    let wsPingTimer = null;
+    let pingStartTime = 0;
+    let totalPacketsReceived = 0;
+
+    function formatNumber(val, decimals = 1) {
+        if (val === null || val === undefined || isNaN(val)) return '--';
+        return Number(val).toFixed(decimals);
+    }
+
+    function convertTemp(celsius) {
+        if (celsius === null || celsius === undefined || isNaN(celsius)) return null;
+        return isFahrenheit ? (celsius * 9/5 + 32) : celsius;
+    }
+
+    function calculateStats(arr) {
+        const valid = arr.filter(v => v !== null && v !== undefined && !isNaN(v));
+        if (!valid.length) return { min: '--', max: '--', avg: '--' };
+        const min = Math.min(...valid);
+        const max = Math.max(...valid);
+        const avg = valid.reduce((a, b) => a + b, 0) / valid.length;
+        return {
+            min: formatNumber(min),
+            max: formatNumber(max),
+            avg: formatNumber(avg)
+        };
+    }
+
+    function updateDashboardUI(records) {
+        if (!records || !records.length) {
+            document.getElementById('lastUpdatedTime').textContent = 'Awaiting ESP32 stream...';
+            return;
+        }
+
+        const latest = records[records.length - 1];
+        
+        // Timestamp handling
+        const tsString = latest.timestamp ? (latest.timestamp.endsWith('Z') ? latest.timestamp : latest.timestamp + 'Z') : new Date().toISOString();
+        const dateObj = new Date(tsString);
+        document.getElementById('lastUpdatedTime').textContent = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+        // Update live status badge
+        const diffSec = Math.round((new Date() - dateObj) / 1000);
+        const badge = document.getElementById('liveStatusBadge');
+        if (badge) {
+            if (diffSec < 30) {
+                badge.innerHTML = '<span class="h-2 w-2 rounded-full bg-emerald-400 pulse-indicator"></span> LIVE STREAMING';
+                badge.className = 'inline-flex items-center gap-1.5 rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-bold text-emerald-300 border border-emerald-500/30';
+            } else {
+                badge.innerHTML = '<span class="h-2 w-2 rounded-full bg-slate-400"></span> IDLE (' + diffSec + 's)';
+                badge.className = 'inline-flex items-center gap-1.5 rounded-full bg-slate-500/20 px-3 py-1 text-xs font-bold text-slate-300 border border-slate-500/30';
+            }
+        }
+
+        // Temperature (DHT11)
+        const displayTemp = convertTemp(latest.temperature);
+        document.getElementById('cardTemp').textContent = formatNumber(displayTemp);
+        document.getElementById('cardTempUnit').textContent = isFahrenheit ? '°F' : '°C';
+        document.getElementById('tempCurrentChartLabel').textContent = `${formatNumber(displayTemp)} ${isFahrenheit ? '°F' : '°C'}`;
+
+        const temps = records.map(r => convertTemp(r.temperature));
+        const tempStats = calculateStats(temps);
+        document.getElementById('tempMin').textContent = `${tempStats.min}${isFahrenheit ? '°F' : '°C'}`;
+        document.getElementById('tempAvg').textContent = `${tempStats.avg}${isFahrenheit ? '°F' : '°C'}`;
+        document.getElementById('tempMax').textContent = `${tempStats.max}${isFahrenheit ? '°F' : '°C'}`;
+
+        // Humidity (DHT11)
+        document.getElementById('cardHum').textContent = formatNumber(latest.humidity);
+        document.getElementById('humCurrentChartLabel').textContent = `${formatNumber(latest.humidity)} %`;
+        const hums = records.map(r => r.humidity);
+        const humStats = calculateStats(hums);
+        document.getElementById('humMin').textContent = `${humStats.min}%`;
+        document.getElementById('humAvg').textContent = `${humStats.avg}%`;
+        document.getElementById('humMax').textContent = `${humStats.max}%`;
+
+        const humBadge = document.getElementById('humConditionBadge');
+        if (latest.humidity > 65) {
+            humBadge.textContent = 'HUMID';
+            humBadge.className = 'rounded-md bg-blue-500/10 px-2 py-0.5 text-[10px] font-bold text-blue-400 border border-blue-500/20';
+        } else if (latest.humidity < 30) {
+            humBadge.textContent = 'DRY';
+            humBadge.className = 'rounded-md bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-400 border border-amber-500/20';
+        } else {
+            humBadge.textContent = 'OPTIMAL';
+            humBadge.className = 'rounded-md bg-cyan-500/10 px-2 py-0.5 text-[10px] font-bold text-cyan-400 border border-cyan-500/20';
+        }
+
+        // Light Intensity (Photoresistor LDR)
+        const lightVal = latest.sun_activity !== undefined ? latest.sun_activity : (latest.light_pct !== undefined ? latest.light_pct : 0.0);
+        document.getElementById('cardLight').textContent = formatNumber(lightVal);
+        document.getElementById('lightCurrentChartLabel').textContent = `${formatNumber(lightVal)} %`;
+        const lights = records.map(r => r.sun_activity !== undefined ? r.sun_activity : (r.light_pct || 0));
+        const lightStats = calculateStats(lights);
+        document.getElementById('lightMin').textContent = `${lightStats.min}%`;
+        document.getElementById('lightAvg').textContent = `${lightStats.avg}%`;
+        document.getElementById('lightMax').textContent = `${lightStats.max}%`;
+
+        const lightBadge = document.getElementById('lightConditionBadge');
+        if (lightVal > 70) {
+            lightBadge.textContent = 'BRIGHT SUN';
+            lightBadge.className = 'rounded-md bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-400 border border-amber-500/20';
+        } else if (lightVal < 25) {
+            lightBadge.textContent = 'LOW LIGHT';
+            lightBadge.className = 'rounded-md bg-slate-500/10 px-2 py-0.5 text-[10px] font-bold text-slate-400 border border-slate-500/20';
+        } else {
+            lightBadge.textContent = 'AMBIENT';
+            lightBadge.className = 'rounded-md bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-500/20';
+        }
+
+        // Auxiliary metrics
+        document.getElementById('cardPress').textContent = latest.pressure != null ? `${formatNumber(latest.pressure, 0)} hPa` : '1013 hPa';
+        document.getElementById('cardWind').textContent = latest.wind_speed != null ? `${formatNumber(latest.wind_speed)} km/h` : 'Calm';
+        document.getElementById('cardBatt').textContent = latest.batt_voltage != null ? `${formatNumber(latest.batt_voltage, 2)} V` : '3.30 V';
+    }
+
+    function updateAIHero(aiData) {
+        if (!aiData) return;
+        document.getElementById('aiBadge').textContent = aiData.vertical_label || "IT'S SUNNY";
+        document.getElementById('aiHeadline').textContent = aiData.headline || "Atmospheric Equilibrium";
+        document.getElementById('aiSummary').textContent = aiData.summary || "Real-time biometeorological conditions verified.";
+        document.getElementById('aiClothing').textContent = aiData.clothing_advice || "Optimal attire suggested for local climate.";
+        document.getElementById('aiComfortScore').textContent = aiData.comfort_index || 85;
+    }
+
+    function buildChartOptions(color, yLabel) {
+        return {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: { duration: 300 },
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: '#111827',
+                    titleColor: '#f8fafc',
+                    bodyColor: color,
+                    borderColor: 'rgba(255, 255, 255, 0.1)',
+                    borderWidth: 1,
+                    padding: 10,
+                    cornerRadius: 8,
+                    displayColors: false
+                }
+            },
+            scales: {
+                x: {
+                    type: 'time',
+                    grid: { color: 'rgba(255, 255, 255, 0.04)' },
+                    ticks: { color: '#94a3b8', font: { family: 'JetBrains Mono', size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 6 }
+                },
+                y: {
+                    grid: { color: 'rgba(255, 255, 255, 0.04)' },
+                    ticks: { color: '#94a3b8', font: { family: 'JetBrains Mono', size: 10 } }
+                }
+            }
+        };
+    }
+
+    function initCharts() {
+        const getSeries = (key, transform = null) => {
+            return weatherRecords.map(r => {
+                const ts = r.timestamp ? (r.timestamp.endsWith('Z') ? r.timestamp : r.timestamp + 'Z') : new Date().toISOString();
+                let val = r[key];
+                if (key === 'sun_activity' && val === undefined) val = r.light_pct;
+                if (transform) val = transform(val);
+                return { x: new Date(ts).getTime(), y: val };
+            });
+        };
+
+        // 1. Temp Chart
+        const tempCtx = document.getElementById('tempChart')?.getContext('2d');
+        if (tempCtx) {
+            charts.temp = new Chart(tempCtx, {
+                type: 'line',
+                data: {
+                    datasets: [{
+                        data: getSeries('temperature', convertTemp),
+                        borderColor: '#fbbf24',
+                        backgroundColor: 'rgba(251, 191, 36, 0.08)',
+                        fill: true,
+                        tension: 0.35,
+                        borderWidth: 2.5,
+                        pointRadius: 0,
+                        pointHoverRadius: 5
+                    }]
+                },
+                options: buildChartOptions('#fbbf24', 'Temperature')
+            });
+        }
+
+        // 2. Humidity Chart
+        const humCtx = document.getElementById('humChart')?.getContext('2d');
+        if (humCtx) {
+            charts.hum = new Chart(humCtx, {
+                type: 'line',
+                data: {
+                    datasets: [{
+                        data: getSeries('humidity'),
+                        borderColor: '#06b6d4',
+                        backgroundColor: 'rgba(6, 182, 212, 0.08)',
+                        fill: true,
+                        tension: 0.35,
+                        borderWidth: 2.5,
+                        pointRadius: 0,
+                        pointHoverRadius: 5
+                    }]
+                },
+                options: buildChartOptions('#06b6d4', 'Humidity %')
+            });
+        }
+
+        // 3. Light Intensity Chart
+        const lightCtx = document.getElementById('lightChart')?.getContext('2d');
+        if (lightCtx) {
+            charts.light = new Chart(lightCtx, {
+                type: 'line',
+                data: {
+                    datasets: [{
+                        data: getSeries('sun_activity'),
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.08)',
+                        fill: true,
+                        tension: 0.35,
+                        borderWidth: 2.5,
+                        pointRadius: 0,
+                        pointHoverRadius: 5
+                    }]
+                },
+                options: buildChartOptions('#10b981', 'Light %')
+            });
+        }
+
+        // 4. Composite Multichannel Chart
+        const compCtx = document.getElementById('compositeChart')?.getContext('2d');
+        if (compCtx) {
+            charts.composite = new Chart(compCtx, {
+                type: 'line',
+                data: {
+                    datasets: [
+                        {
+                            label: 'Temp (°C)',
+                            data: getSeries('temperature'),
+                            borderColor: '#fbbf24',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            tension: 0.3
+                        },
+                        {
+                            label: 'Hum (%)',
+                            data: getSeries('humidity'),
+                            borderColor: '#06b6d4',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            tension: 0.3
+                        },
+                        {
+                            label: 'Light (%)',
+                            data: getSeries('sun_activity'),
+                            borderColor: '#10b981',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            tension: 0.3
+                        }
+                    ]
+                },
+                options: {
+                    ...buildChartOptions('#a855f7', 'Value'),
+                    plugins: {
+                        legend: {
+                            display: true,
+                            labels: { color: '#cbd5e1', font: { family: 'Plus Jakarta Sans', size: 11 } }
+                        }
+                    }
+                }
+            });
+        }
+    }
+
+    function appendLiveReadingToCharts(reading) {
+        const ts = reading.timestamp ? (reading.timestamp.endsWith('Z') ? reading.timestamp : reading.timestamp + 'Z') : new Date().toISOString();
+        const timeMs = new Date(ts).getTime();
+
+        const lightVal = reading.sun_activity !== undefined ? reading.sun_activity : (reading.light_pct || 0);
+
+        if (charts.temp) {
+            charts.temp.data.datasets[0].data.push({ x: timeMs, y: convertTemp(reading.temperature) });
+            if (charts.temp.data.datasets[0].data.length > 500) charts.temp.data.datasets[0].data.shift();
+            charts.temp.update('none');
+        }
+
+        if (charts.hum) {
+            charts.hum.data.datasets[0].data.push({ x: timeMs, y: reading.humidity });
+            if (charts.hum.data.datasets[0].data.length > 500) charts.hum.data.datasets[0].data.shift();
+            charts.hum.update('none');
+        }
+
+        if (charts.light) {
+            charts.light.data.datasets[0].data.push({ x: timeMs, y: lightVal });
+            if (charts.light.data.datasets[0].data.length > 500) charts.light.data.datasets[0].data.shift();
+            charts.light.update('none');
+        }
+
+        if (charts.composite) {
+            charts.composite.data.datasets[0].data.push({ x: timeMs, y: reading.temperature });
+            charts.composite.data.datasets[1].data.push({ x: timeMs, y: reading.humidity });
+            charts.composite.data.datasets[2].data.push({ x: timeMs, y: lightVal });
+            if (charts.composite.data.datasets[0].data.length > 500) {
+                charts.composite.data.datasets[0].data.shift();
+                charts.composite.data.datasets[1].data.shift();
+                charts.composite.data.datasets[2].data.shift();
+            }
+            charts.composite.update('none');
+        }
+    }
+
+    function redrawAllCharts() {
+        const getSeries = (key, transform = null) => {
+            return weatherRecords.map(r => {
+                const ts = r.timestamp ? (r.timestamp.endsWith('Z') ? r.timestamp : r.timestamp + 'Z') : new Date().toISOString();
+                let val = r[key];
+                if (key === 'sun_activity' && val === undefined) val = r.light_pct;
+                if (transform) val = transform(val);
+                return { x: new Date(ts).getTime(), y: val };
+            });
+        };
+
+        if (charts.temp) {
+            charts.temp.data.datasets[0].data = getSeries('temperature', convertTemp);
+            charts.temp.update();
+        }
+        if (charts.hum) {
+            charts.hum.data.datasets[0].data = getSeries('humidity');
+            charts.hum.update();
+        }
+        if (charts.light) {
+            charts.light.data.datasets[0].data = getSeries('sun_activity');
+            charts.light.update();
+        }
+        if (charts.composite) {
+            charts.composite.data.datasets[0].data = getSeries('temperature');
+            charts.composite.data.datasets[1].data = getSeries('humidity');
+            charts.composite.data.datasets[2].data = getSeries('sun_activity');
+            charts.composite.update();
+        }
+    }
+
+    async function fetchHistoricalData(hoursOrDays, isDays = true) {
+        const refreshSpinner = document.getElementById('refreshSpinner');
+        if (refreshSpinner) refreshSpinner.classList.add('animate-spin');
+
+        const url = isDays ? `/api/weather-history?days=${hoursOrDays}&_t=${Date.now()}` : `/api/history?hours=${hoursOrDays}&_t=${Date.now()}`;
+        try {
+            const resp = await fetch(url);
+            const data = await resp.json();
+            const list = Array.isArray(data) ? data : (data.readings || []);
+            if (list.length > 0) {
+                weatherRecords = list;
+                updateDashboardUI(weatherRecords);
+                redrawAllCharts();
+            }
+        } catch (e) {
+            console.warn('[HTTP] History sync warning:', e);
+        } finally {
+            if (refreshSpinner) setTimeout(() => refreshSpinner.classList.remove('animate-spin'), 300);
+        }
+    }
+
+    // =========================================================================
+    // REAL-TIME WEBSOCKET CLIENT WITH AUTOMATIC RECONNECT & HEARTBEAT
+    // =========================================================================
+    function connectWebSocket() {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${protocol}//${window.location.host}/ws/live`;
+        
+        const dot = document.getElementById('wsDot');
+        const text = document.getElementById('wsStatusText');
+
+        if (text) text.textContent = 'CONNECTING...';
+        if (dot) {
+            dot.className = 'h-2 w-2 rounded-full bg-amber-400 animate-pulse';
+        }
+
+        try {
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                if (text) text.textContent = 'LIVE STREAM';
+                if (dot) {
+                    dot.className = 'h-2 w-2 rounded-full bg-emerald-400 pulse-indicator';
+                }
+
+                // Setup latency ping-pong
+                if (wsPingTimer) clearInterval(wsPingTimer);
+                wsPingTimer = setInterval(() => {
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        pingStartTime = performance.now();
+                        ws.send('ping');
+                    }
+                }, 5000);
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const msg = JSON.parse(event.data);
+                    
+                    if (msg.type === 'pong') {
+                        const latency = Math.round(performance.now() - pingStartTime);
+                        document.getElementById('latencyMs').textContent = `${latency} ms`;
+                        return;
+                    }
+
+                    if (msg.type === 'telemetry_update' && msg.data) {
+                        totalPacketsReceived++;
+                        weatherRecords.push(msg.data);
+                        if (weatherRecords.length > 500) weatherRecords.shift();
+                        updateDashboardUI(weatherRecords);
+                        appendLiveReadingToCharts(msg.data);
+
+                        if (msg.ai_analysis) {
+                            updateAIHero(msg.ai_analysis);
+                        }
+                    } else if (msg.type === 'ai_update' && msg.analysis) {
+                        updateAIHero(msg.analysis);
+                    }
+                } catch (err) {
+                    console.error('[WS ERROR] Parse failure:', err);
+                }
+            };
+
+            ws.onclose = () => {
+                if (text) text.textContent = 'RECONNECTING...';
+                if (dot) {
+                    dot.className = 'h-2 w-2 rounded-full bg-rose-500 animate-pulse';
+                }
+                if (wsPingTimer) clearInterval(wsPingTimer);
+                setTimeout(connectWebSocket, 3000);
+            };
+
+            ws.onerror = () => {
+                if (ws) ws.close();
+            };
+
+        } catch (e) {
+            setTimeout(connectWebSocket, 5000);
+        }
+    }
+
+    // =========================================================================
+    // DOM INITIALIZATION
+    // =========================================================================
+    window.addEventListener('DOMContentLoaded', () => {
+        initCharts();
+        updateDashboardUI(weatherRecords);
+        connectWebSocket();
+
+        // Unit toggle
+        const unitBtn = document.getElementById('unitToggleBtn');
+        if (unitBtn) {
+            unitBtn.addEventListener('click', () => {
+                isFahrenheit = !isFahrenheit;
+                document.getElementById('currentUnitText').textContent = isFahrenheit ? '°F' : '°C';
+                updateDashboardUI(weatherRecords);
+                redrawAllCharts();
+            });
+        }
+
+        // Time range selector
+        const rangeSelect = document.getElementById('timeRangeSelect');
+        if (rangeSelect) {
+            rangeSelect.addEventListener('change', (e) => {
+                fetchHistoricalData(parseFloat(e.target.value), true);
+            });
+        }
+
+        // Refresh button
+        const refreshBtn = document.getElementById('refreshBtn');
+        if (refreshBtn && rangeSelect) {
+            refreshBtn.addEventListener('click', () => {
+                fetchHistoricalData(parseFloat(rangeSelect.value), true);
+            });
+        }
+
+        // AI Analyze button
+        const aiBtn = document.getElementById('aiAnalyzeBtn');
+        if (aiBtn) {
+            aiBtn.addEventListener('click', async () => {
+                aiBtn.disabled = true;
+                aiBtn.classList.add('opacity-50');
+                try {
+                    const r = await fetch('/api/ai-analysis/refresh', { method: 'POST' });
+                    const res = await r.json();
+                    if (res.analysis) {
+                        updateAIHero(res.analysis);
+                    }
+                } catch (ex) {
+                    console.error('AI refresh error:', ex);
+                } finally {
+                    aiBtn.disabled = false;
+                    aiBtn.classList.remove('opacity-50');
+                }
+            });
+        }
+
+        // Fetch initial AI summary
+        fetch('/api/ai-analysis').then(r => r.json()).then(res => {
+            if (res.current) updateAIHero(res.current);
+        }).catch(() => {});
+    });
+</script>
+{% endblock %}

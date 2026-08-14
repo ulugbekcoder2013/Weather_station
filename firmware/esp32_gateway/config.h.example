@@ -1,0 +1,31 @@
+#ifndef CONFIG_H
+#define CONFIG_H
+
+// ==============================================================================
+// SMART HOME WEATHER STATION — ESP32 DIRECT SENSOR NODE CONFIG TEMPLATE
+// Direct Sensor Acquisition: DHT11 (Temp/Humidity) + LDR (Sunlight/Illuminance)
+// ==============================================================================
+// Copy secrets.h.example to "secrets.h" and insert your real credentials.
+// ==============================================================================
+
+#include "secrets.h"
+
+// 1. Wi-Fi Configuration
+#define WIFI_CONNECT_TIMEOUT    20000
+
+// 2. Device Identity
+#define DEVICE_ID               "WS-001"
+
+// 3. Direct Sensor Hardware Pinout
+#define DHT11_PIN               4     // Digital DATA pin of DHT11
+#define LDR_PIN                 34    // ADC pin of Photoresistor voltage divider
+#define LDR_INVERT_LOGIC        0
+
+// 4. Real-Time Telemetry Streaming Rate
+#define LIVE_STREAM_INTERVAL_MS 2000  // Stream every 2 seconds
+
+// 5. Offline Buffer & Resilience Settings
+#define RING_BUFFER_CAPACITY    150
+#define STATUS_LED_PIN          2
+
+#endif // CONFIG_H

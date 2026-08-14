@@ -1,0 +1,15 @@
+{
+  "name": "DIY weather station",
+  "version": "1.0.0",
+  "description": "Weather station app",
+  "main": "tailwind.config.js",
+  "scripts": {
+    "build:css": "npx tailwindcss -i ./app/static/css/styles.css -o ./app/static/css/tailwind.css --minify"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "tailwindcss": "^3.4.17"
+  }
+}

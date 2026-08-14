@@ -1,0 +1,48 @@
+# OS & Editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+.idea/
+*.iml
+
+# Android & Gradle
+android/.gradle/
+android/.kotlin/
+android/build/
+android/app/build/
+android/local.properties
+android/.cxx/
+android/captures/
+.gradle/
+build/
+app/build/
+
+# Server Environment & Logs
+server/.env
+server/data/*.sqlite
+server/data/*.sqlite-journal
+server/data/*.log
+server/logs/*.log
+server/app/instance/
+*.db
+*.sqlite
+
+# Tools & Temp
+tools/
+weather_station_backend_deploy.zip
+
+# Python & Scripts
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+venv/
+.env/
+.pio/
+
+# APK Binaries
+*.apk
+release_apk/
+stitch_export/

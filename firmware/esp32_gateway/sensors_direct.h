@@ -1,0 +1,223 @@
+#ifndef SENSORS_DIRECT_H
+#define SENSORS_DIRECT_H
+
+#include <Arduino.h>
+#include "config.h"
+
+struct SensorReading {
+  float temperature_c;
+  float humidity_pct;
+  float light_pct;
+  bool is_valid;
+  const char* error_msg;
+};
+
+class DirectSensorManager {
+private:
+  uint8_t dhtPin;
+  uint8_t ldrPin;
+  unsigned long lastDhtReadMs;
+  float lastValidTemp;
+  float lastValidHum;
+  float smoothedLdrVal;
+  bool hasInitialLdr;
+  uint32_t totalSamples;
+  uint32_t dhtErrors;
+
+  // Precision microsecond bitbang reader for DHT11 on ESP32
+  // Uses FreeRTOS portENTER_CRITICAL / portEXIT_CRITICAL to prevent timing jitter
+  bool readDHT11Raw(float& outTemp, float& outHum) {
+    uint8_t data[5] = {0, 0, 0, 0, 0};
+
+    // 1. Send start signal: pull LOW for >= 18ms
+    pinMode(dhtPin, OUTPUT);
+    digitalWrite(dhtPin, LOW);
+    delay(20);
+
+    // 2. Pull HIGH for 20-40us, then switch to INPUT
+    digitalWrite(dhtPin, HIGH);
+    delayMicroseconds(30);
+    pinMode(dhtPin, INPUT_PULLUP);
+
+    // 3. Time critical sampling section
+    portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
+    portENTER_CRITICAL(&mux);
+
+    // Wait for DHT response (LOW for 80us, then HIGH for 80us)
+    unsigned long timeoutMicros = micros() + 200;
+    while (digitalRead(dhtPin) == HIGH) {
+      if (micros() > timeoutMicros) {
+        portEXIT_CRITICAL(&mux);
+        return false;
+      }
+    }
+
+    timeoutMicros = micros() + 200;
+    while (digitalRead(dhtPin) == LOW) {
+      if (micros() > timeoutMicros) {
+        portEXIT_CRITICAL(&mux);
+        return false;
+      }
+    }
+
+    timeoutMicros = micros() + 200;
+    while (digitalRead(dhtPin) == HIGH) {
+      if (micros() > timeoutMicros) {
+        portEXIT_CRITICAL(&mux);
+        return false;
+      }
+    }
+
+    // Read 40 bits (5 bytes)
+    for (int i = 0; i < 40; i++) {
+      // Wait for LOW phase (50us)
+      timeoutMicros = micros() + 150;
+      while (digitalRead(dhtPin) == LOW) {
+        if (micros() > timeoutMicros) {
+          portEXIT_CRITICAL(&mux);
+          return false;
+        }
+      }
+
+      // Measure duration of HIGH phase (26-28us for '0', 70us for '1')
+      unsigned long highStart = micros();
+      timeoutMicros = highStart + 150;
+      while (digitalRead(dhtPin) == HIGH) {
+        if (micros() > timeoutMicros) {
+          portEXIT_CRITICAL(&mux);
+          return false;
+        }
+      }
+      unsigned long highDuration = micros() - highStart;
+
+      uint8_t byteIdx = i / 8;
+      data[byteIdx] <<= 1;
+      if (highDuration > 45) {
+        data[byteIdx] |= 1;
+      }
+    }
+
+    portEXIT_CRITICAL(&mux);
+
+    // 4. Verify checksum
+    uint8_t checksum = (data[0] + data[1] + data[2] + data[3]) & 0xFF;
+    if (data[4] != checksum) {
+      return false;
+    }
+
+    // DHT11 format:
+    // data[0]: Humidity integer
+    // data[1]: Humidity decimal (usually 0 for DHT11)
+    // data[2]: Temperature integer
+    // data[3]: Temperature decimal (usually 0 for DHT11)
+    float hum = (float)data[0] + ((float)data[1] * 0.1f);
+    float temp = (float)data[2] + ((float)data[3] * 0.1f);
+
+    // Sanity range check for DHT11
+    if (temp < -10.0f || temp > 60.0f || hum < 5.0f || hum > 100.0f) {
+      return false;
+    }
+
+    outHum = hum;
+    outTemp = temp;
+    return true;
+  }
+
+public:
+  DirectSensorManager(uint8_t dht_pin = DHT11_PIN, uint8_t ldr_pin = LDR_PIN)
+    : dhtPin(dht_pin), ldrPin(ldr_pin), lastDhtReadMs(0),
+      lastValidTemp(22.0f), lastValidHum(50.0f), smoothedLdrVal(0.0f),
+      hasInitialLdr(false), totalSamples(0), dhtErrors(0) {}
+
+  void begin() {
+    pinMode(dhtPin, INPUT_PULLUP);
+    pinMode(ldrPin, INPUT);
+    analogReadResolution(12); // 12-bit ADC (0 - 4095)
+    #if defined(ADC_11db)
+    analogSetAttenuation(ADC_11db); // Full 0-3.3V range
+    #endif
+    Serial.printf("[SENSORS] Direct sensor manager initialized. DHT11 Pin: GPIO %d, LDR Pin: GPIO %d (ADC)\n", dhtPin, ldrPin);
+  }
+
+  /**
+   * Reads raw ADC from LDR with 16-sample oversampling and EMA smoothing.
+   * Returns a 0.0 - 100.0 percentage.
+   */
+  float readLightPercentage() {
+    uint32_t adcSum = 0;
+    const int OVERSAMPLE_COUNT = 16;
+    for (int i = 0; i < OVERSAMPLE_COUNT; i++) {
+      adcSum += analogRead(ldrPin);
+      delayMicroseconds(50);
+    }
+    float rawAdc = (float)adcSum / (float)OVERSAMPLE_COUNT;
+
+    // Convert raw ADC (0..4095) to percentage (0.0%..100.0%)
+    // Standard divider: LDR connected to 3.3V, 10k resistor to GND, ADC in middle.
+    // In bright light: LDR resistance drops -> ADC voltage rises (high ADC = bright).
+    // In dark: LDR resistance rises -> ADC voltage drops (low ADC = dark).
+    #if defined(LDR_INVERT_LOGIC) && (LDR_INVERT_LOGIC == 1)
+    float pct = ((4095.0f - rawAdc) / 4095.0f) * 100.0f;
+    #else
+    float pct = (rawAdc / 4095.0f) * 100.0f;
+    #endif
+
+    pct = constrain(pct, 0.0f, 100.0f);
+
+    // Exponential Moving Average (EMA) smoothing for stable live readings
+    const float EMA_ALPHA = 0.25f;
+    if (!hasInitialLdr) {
+      smoothedLdrVal = pct;
+      hasInitialLdr = true;
+    } else {
+      smoothedLdrVal = (EMA_ALPHA * pct) + ((1.0f - EMA_ALPHA) * smoothedLdrVal);
+    }
+
+    return smoothedLdrVal;
+  }
+
+  /**
+   * Samples all physical sensors directly on the ESP32.
+   */
+  SensorReading readSensors() {
+    totalSamples++;
+    SensorReading result;
+    result.light_pct = readLightPercentage();
+
+    unsigned long now = millis();
+    // DHT11 requires >= 1000ms between physical sampling cycles
+    if (now - lastDhtReadMs >= 1000 || lastDhtReadMs == 0) {
+      float temp = 0.0f;
+      float hum = 0.0f;
+      bool ok = readDHT11Raw(temp, hum);
+      if (ok) {
+        lastValidTemp = temp;
+        lastValidHum = hum;
+        lastDhtReadMs = now;
+        result.temperature_c = temp;
+        result.humidity_pct = hum;
+        result.is_valid = true;
+        result.error_msg = nullptr;
+      } else {
+        dhtErrors++;
+        // Use last valid reading with fallback if available
+        result.temperature_c = lastValidTemp;
+        result.humidity_pct = lastValidHum;
+        result.is_valid = (lastValidTemp > -40.0f);
+        result.error_msg = "DHT11 raw read failed - retained previous valid reading";
+      }
+    } else {
+      result.temperature_c = lastValidTemp;
+      result.humidity_pct = lastValidHum;
+      result.is_valid = true;
+      result.error_msg = nullptr;
+    }
+
+    return result;
+  }
+
+  uint32_t getTotalSamples() const { return totalSamples; }
+  uint32_t getDhtErrors() const { return dhtErrors; }
+};
+
+#endif // SENSORS_DIRECT_H
