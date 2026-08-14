@@ -105,15 +105,12 @@ void loop() {
 
     // 3. Transmit telemetry to server
     if (wifiManager.isConnected()) {
-      // First, flush any cached offline records
+      // Flush 1 buffered offline record per cycle to keep live streaming responsive
       TelemetryRecord bufferedRecord;
-      int flushedCount = 0;
-      while (offlineBuffer.peek(bufferedRecord) && flushedCount < 10) {
-        if (!httpClient.sendTelemetry(bufferedRecord)) {
-          break; // Server error, retry next cycle
+      if (offlineBuffer.peek(bufferedRecord)) {
+        if (httpClient.sendTelemetry(bufferedRecord)) {
+          offlineBuffer.pop(bufferedRecord);
         }
-        offlineBuffer.pop(bufferedRecord);
-        flushedCount++;
       }
 
       // Transmit the current real-time record

@@ -42,7 +42,7 @@ public:
     serializeJson(document, payload);
 
     // Retry loop (up to 3 attempts with 2s backoff)
-    const int maxRetries = 3;
+    const int maxRetries = 2;
     bool isHttps = strncmp(ingestUrl, "https://", 8) == 0;
 
     for (int attempt = 1; attempt <= maxRetries; attempt++) {
@@ -52,11 +52,10 @@ public:
 
       if (isHttps) {
         secureClient.setInsecure(); // Resilient TLS connection for cloud hosting & Render
-        secureClient.setTimeout(25000); // 25s timeout for Render cold spin-up
-        secureClient.setHandshakeTimeout(20);
+        secureClient.setTimeout(15000); // 15s timeout
         http.begin(secureClient, ingestUrl);
       } else {
-        plainClient.setTimeout(25000);
+        plainClient.setTimeout(15000);
         http.begin(plainClient, ingestUrl);
       }
 
@@ -65,7 +64,7 @@ public:
       http.addHeader("Content-Type", "application/json");
       http.addHeader("X-API-Key", apiKey);
       http.addHeader("User-Agent", "ESP32-Station/2.0");
-      http.setTimeout(25000); // 25s HTTP timeout
+      http.setTimeout(15000); // 15s HTTP timeout
 
       Serial.printf("[HTTP POST] (Attempt %d/%d) Transmitting to: %s\n", attempt, maxRetries, ingestUrl);
       int httpCode = http.POST(payload);
@@ -88,7 +87,7 @@ public:
       http.end();
 
       if (attempt < maxRetries) {
-        delay(2000); // 2 second backoff before next attempt
+        delay(500); // 500ms backoff before next attempt
       }
     }
 
