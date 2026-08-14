@@ -12,6 +12,7 @@ import math
 import hmac
 import logging
 import asyncio
+from contextlib import asynccontextmanager
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta, timezone
 
@@ -48,38 +49,10 @@ FALLBACK_KEYS = {
     "esp32_device_key"
 }
 
-# Initialize database schema
+# Initialize database schema eagerly for script compatibility
 init_db()
 
-# Create FastAPI app
-app = FastAPI(
-    title="Smart Home Weather Station Real-Time Engine",
-    description="Hyper-fast real-time telemetry server for ESP32 (DHT11 + Photoresistor), Web Dashboard, and Android App.",
-    version="2.0.0"
-)
-
-# CORS middleware for mobile and cross-origin clients
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Mount static and template directories
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-STATIC_DIR = os.path.join(BASE_DIR, "static")
-TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
-
-if os.path.exists(STATIC_DIR):
-    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-
-templates = Jinja2Templates(directory=TEMPLATES_DIR)
-
-# ==============================================================================
-# IN-MEMORY MICROSECOND STATE CACHE
-# ==============================================================================
+# In-Memory Microsecond State Cache
 _latest_telemetry_cache: Dict[str, Any] = {
     "data": None,
     "last_updated_epoch": 0.0,
@@ -103,6 +76,43 @@ def populate_cache_from_db():
         logger.warning(f"[CACHE] Could not prime cache at startup: {e}")
 
 populate_cache_from_db()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        init_db()
+        populate_cache_from_db()
+    except Exception as e:
+        logger.error(f"[STARTUP] Initialization exception: {e}")
+    yield
+
+# Create FastAPI app
+app = FastAPI(
+    title="Smart Home Weather Station Real-Time Engine",
+    description="Hyper-fast real-time telemetry server for ESP32 (DHT11 + Photoresistor), Web Dashboard, and Android App.",
+    version="2.0.0",
+    lifespan=lifespan
+)
+
+# CORS middleware for mobile and cross-origin clients
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Mount static and template directories
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+STATIC_DIR = os.path.join(BASE_DIR, "static")
+TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
+
+if os.path.exists(STATIC_DIR):
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+templates = Jinja2Templates(directory=TEMPLATES_DIR)
+
 
 
 # ==============================================================================
@@ -448,14 +458,17 @@ async def handle_weather_ingest(request: Request, db: Session = Depends(get_db))
 # ==============================================================================
 # REST API: QUERY LATEST (SUB-MILLISECOND CACHE)
 # ==============================================================================
-@app.get("/api/latest")
-@app.get("/api/latest.php")
-@app.get("/api/weather/latest")
-async def get_latest_weather(device_id: Optional[str] = None, db: Session = Depends(get_db)):
+@app.api_route("/api/latest", methods=["GET", "HEAD"])
+@app.api_route("/api/latest.php", methods=["GET", "HEAD"])
+@app.api_route("/api/weather/latest", methods=["GET", "HEAD"])
+async def get_latest_weather(request: Request, device_id: Optional[str] = None, db: Session = Depends(get_db)):
     """
     Returns latest telemetry frame. Served in <0.2ms from RAM cache if device_id is default,
     or queried with index from SQLite/Postgres.
     """
+    if request.method == "HEAD":
+        return Response(status_code=status.HTTP_200_OK, media_type="application/json")
+
     cached_data = _latest_telemetry_cache["data"]
     ai_data = get_cached_ai_analysis()
 
@@ -513,16 +526,27 @@ async def get_latest_weather(device_id: Optional[str] = None, db: Session = Depe
 # ==============================================================================
 # REST API: QUERY HISTORY
 # ==============================================================================
-@app.get("/api/weather-history")
+@app.api_route("/api/weather-history", methods=["GET", "HEAD"])
 async def get_weather_history_list(
-    days: Optional[float] = Query(default=1.0, ge=0.01, le=90.0),
+    request: Request,
+    days: Optional[float] = Query(default=None, ge=0.01, le=90.0),
+    hours: Optional[float] = Query(default=None, ge=0.01, le=2160.0),
     device_id: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     """
-    Returns array of historical sensor telemetry objects for the specified days.
+    Returns array of historical sensor telemetry objects for the specified days or hours.
     """
-    target_hours = float(days or 1.0) * 24.0
+    if request.method == "HEAD":
+        return Response(status_code=status.HTTP_200_OK, media_type="application/json")
+
+    if hours is not None:
+        target_hours = float(hours)
+    elif days is not None:
+        target_hours = float(days) * 24.0
+    else:
+        target_hours = 24.0
+
     cutoff = utc_now() - timedelta(hours=target_hours)
 
     query = db.query(WeatherData).filter(WeatherData.timestamp >= cutoff)
@@ -533,17 +557,23 @@ async def get_weather_history_list(
     return [w.to_dict() for w in readings]
 
 
-@app.get("/api/history")
-@app.get("/api/history.php")
+@app.api_route("/api/history", methods=["GET", "HEAD"])
+@app.api_route("/api/history.php", methods=["GET", "HEAD"])
 async def get_weather_history_object(
-    hours: Optional[int] = Query(default=24, ge=1, le=2160),
+    request: Request,
+    hours: Optional[float] = Query(default=24, ge=0.01, le=2160),
+    days: Optional[float] = Query(default=None, ge=0.01, le=90.0),
     device_id: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     """
     Returns structured history object with readings list.
     """
-    cutoff = utc_now() - timedelta(hours=float(hours or 24))
+    if request.method == "HEAD":
+        return Response(status_code=status.HTTP_200_OK, media_type="application/json")
+
+    target_hours = float(days * 24.0) if days is not None else float(hours or 24)
+    cutoff = utc_now() - timedelta(hours=target_hours)
 
     query = db.query(WeatherData).filter(WeatherData.timestamp >= cutoff)
     if device_id:
@@ -554,7 +584,7 @@ async def get_weather_history_object(
 
     return {
         "success": True,
-        "hours": hours,
+        "hours": target_hours,
         "count": len(results),
         "readings": results
     }
@@ -563,9 +593,10 @@ async def get_weather_history_object(
 # ==============================================================================
 # REST API: SUMMARY STATISTICS
 # ==============================================================================
-@app.get("/api/stats")
-@app.get("/api/stats.php")
+@app.api_route("/api/stats", methods=["GET", "HEAD"])
+@app.api_route("/api/stats.php", methods=["GET", "HEAD"])
 async def get_weather_stats(
+    request: Request,
     period: str = "day",
     device_id: Optional[str] = None,
     db: Session = Depends(get_db)
@@ -573,6 +604,9 @@ async def get_weather_stats(
     """
     Computes 24h min, max, average aggregates for DHT11 and LDR sensors.
     """
+    if request.method == "HEAD":
+        return Response(status_code=status.HTTP_200_OK, media_type="application/json")
+
     cutoff = utc_now() - timedelta(hours=24)
     query = db.query(WeatherData).filter(WeatherData.timestamp >= cutoff)
     if device_id:
@@ -631,12 +665,15 @@ async def get_weather_stats(
 # ==============================================================================
 # REST API: AI ANALYSIS
 # ==============================================================================
-@app.get("/api/ai-analysis")
-@app.get("/api/ai/summary")
-async def get_ai_summary(db: Session = Depends(get_db)):
+@app.api_route("/api/ai-analysis", methods=["GET", "HEAD"])
+@app.api_route("/api/ai/summary", methods=["GET", "HEAD"])
+async def get_ai_summary(request: Request, db: Session = Depends(get_db)):
     """
     Returns cached AI meteorological analysis and historical AI records.
     """
+    if request.method == "HEAD":
+        return Response(status_code=status.HTTP_200_OK, media_type="application/json")
+
     current_ai = get_cached_ai_analysis()
     history_records = db.query(AIAnalysis).order_by(AIAnalysis.timestamp.desc()).limit(10).all()
     return {
@@ -697,11 +734,14 @@ async def refresh_ai_analysis(db: Session = Depends(get_db)):
 # ==============================================================================
 # REST API: SYSTEM HEALTH & ADMIN
 # ==============================================================================
-@app.get("/api/health")
-async def health_check(db: Session = Depends(get_db)):
+@app.api_route("/api/health", methods=["GET", "HEAD"])
+async def health_check(request: Request, db: Session = Depends(get_db)):
     """
     High-performance health check for load balancers, uptime monitors, and tests.
     """
+    if request.method == "HEAD":
+        return Response(status_code=status.HTTP_200_OK, media_type="application/json")
+
     try:
         db.execute(text("SELECT 1"))
         db_status = "connected"
@@ -758,16 +798,23 @@ async def reset_database(request: Request, db: Session = Depends(get_db)):
 # ==============================================================================
 # WEB DASHBOARD ROUTES
 # ==============================================================================
-@app.get("/", response_class=HTMLResponse)
-@app.get("/plots", response_class=HTMLResponse)
-@app.get("/plots.html", response_class=HTMLResponse)
-@app.get("/dashboard", response_class=HTMLResponse)
-@app.get("/index.html", response_class=HTMLResponse)
+@app.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
+@app.api_route("/plots", methods=["GET", "HEAD"], response_class=HTMLResponse)
+@app.api_route("/plots.html", methods=["GET", "HEAD"], response_class=HTMLResponse)
+@app.api_route("/dashboard", methods=["GET", "HEAD"], response_class=HTMLResponse)
+@app.api_route("/index.html", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def serve_dashboard(request: Request, db: Session = Depends(get_db)):
+    if request.method == "HEAD":
+        return Response(status_code=status.HTTP_200_OK, media_type="text/html")
+
     cutoff = utc_now() - timedelta(hours=24)
     data = db.query(WeatherData).filter(WeatherData.timestamp >= cutoff).order_by(WeatherData.timestamp.asc(), WeatherData.id.asc()).all()
     weather_list = [w.to_dict() for w in data]
-    return templates.TemplateResponse("plots.html", {"request": request, "weather_list": weather_list})
+    return templates.TemplateResponse(
+        request=request,
+        name="plots.html",
+        context={"request": request, "weather_list": weather_list}
+    )
 
 
 # ==============================================================================
@@ -778,3 +825,4 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     debug = os.environ.get("DEBUG", "false").lower() in ("true", "1", "yes")
     uvicorn.run("main:app", host="0.0.0.0", port=port, reload=debug, access_log=True)
+

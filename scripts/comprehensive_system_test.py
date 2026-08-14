@@ -262,7 +262,12 @@ def test_web_server_and_apis():
     )
 
     try:
-        time.sleep(2.5)
+        # Wait for server readiness (up to 10s)
+        for _ in range(30):
+            st, _ = http_req("/api/health")
+            if st == 200:
+                break
+            time.sleep(0.3)
 
         # 3.1: Health endpoint
         print_test("GET /api/health (System Health Probe)")
@@ -369,10 +374,18 @@ def test_web_server_and_apis():
         print_test("GET /api/weather-history & GET /api/history")
         status, res = http_req("/api/weather-history?days=1")
         if status == 200 and isinstance(res, list) and len(res) == 2:
-            report_pass(f"/api/weather-history returned {len(res)} data points.")
+            report_pass(f"/api/weather-history?days=1 returned {len(res)} data points.")
             passed += 1
         else:
-            report_fail(f"/api/weather-history failed: {status}, {res}")
+            report_fail(f"/api/weather-history?days=1 failed: {status}, {res}")
+            failed += 1
+
+        status, res = http_req("/api/weather-history?hours=24")
+        if status == 200 and isinstance(res, list) and len(res) == 2:
+            report_pass(f"/api/weather-history?hours=24 returned {len(res)} data points.")
+            passed += 1
+        else:
+            report_fail(f"/api/weather-history?hours=24 failed: {status}, {res}")
             failed += 1
 
         status, res = http_req("/api/history?hours=24")
@@ -418,14 +431,25 @@ def test_web_server_and_apis():
         print_test("GET / (Web Dashboard Neo-Brutalist HTML View)")
         status, res = http_req("/")
         raw_html = res.get("raw", "")
-        if status == 200 and ("Live Weather Station" in raw_html or "Temperature" in raw_html) and "Chart" in raw_html:
+        if status == 200 and ("AURA" in raw_html or "Weather Station" in raw_html or "Temperature" in raw_html) and "Chart" in raw_html:
             report_pass("HTML template rendered with chart scripts, Tailwind classes, and live metric widgets.")
             passed += 1
         else:
             report_fail(f"Web dashboard rendering failed: Status {status}")
             failed += 1
 
-        # 3.13: Admin Reset Database
+        # 3.13: HEAD Requests (Uptime Monitors & Render Health Probes)
+        print_test("HEAD / & HEAD /api/health (Uptime Monitor Probe)")
+        status_head_root, _ = http_req("/", method="HEAD")
+        status_head_health, _ = http_req("/api/health", method="HEAD")
+        if status_head_root == 200 and status_head_health == 200:
+            report_pass("HEAD requests on '/' and '/api/health' returned HTTP 200 OK without 405 errors.")
+            passed += 1
+        else:
+            report_fail(f"HEAD request failed: root={status_head_root}, health={status_head_health}")
+            failed += 1
+
+        # 3.14: Admin Reset Database
         print_test("POST /api/reset (Database Purge & Idempotency)")
         status, res = http_req("/api/reset", method="POST", headers={"X-API-Key": TEST_API_KEY})
         if status == 200 and res.get("success") is True:

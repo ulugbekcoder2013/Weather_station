@@ -138,6 +138,12 @@ def perform_ai_analysis(reading_dict: dict) -> dict:
         logger.warning("No telemetry provided for AI analysis.")
         return get_cached_ai_analysis()
 
+    if not OPENROUTER_API_KEY or not OPENROUTER_API_KEY.strip():
+        logger.info("No OPENROUTER_API_KEY configured; utilizing built-in local meteorological heuristic engine.")
+        heuristic_res = _heuristic_fallback(reading_dict)
+        set_cached_ai_analysis(heuristic_res)
+        return heuristic_res
+
     prompt = _build_ai_prompt(reading_dict)
     
     headers = {
@@ -291,9 +297,8 @@ class AIBackgroundScheduler:
     """
     Background worker that runs periodically to analyze new database telemetry.
     """
-    def __init__(self, app, db, weather_data_cls, ai_analysis_cls, interval_sec: int = 600):
-        self.app = app
-        self.db = db
+    def __init__(self, session_factory, weather_data_cls, ai_analysis_cls, interval_sec: int = 600):
+        self.session_factory = session_factory
         self.weather_data_cls = weather_data_cls
         self.ai_analysis_cls = ai_analysis_cls
         self.interval_sec = interval_sec
@@ -331,33 +336,41 @@ class AIBackgroundScheduler:
 
     def analyze_now(self):
         """Fetches the latest reading from DB and triggers AI inference."""
+        if not self.session_factory:
+            return
+        db = self.session_factory()
         try:
-            with self.app.app_context():
-                latest = self.weather_data_cls.query.order_by(self.weather_data_cls.timestamp.desc()).first()
-                if latest:
-                    reading_dict = latest.to_dict()
-                    analysis = perform_ai_analysis(reading_dict)
-                    
-                    # Persist AI inference to database
-                    try:
-                        record = self.ai_analysis_cls(
-                            weather_type=analysis.get('weather_type', 'sunny'),
-                            vertical_label=analysis.get('vertical_label', "IT'S SUNNY"),
-                            headline=analysis.get('headline', ''),
-                            summary=analysis.get('summary', ''),
-                            clothing_advice=analysis.get('clothing_advice', ''),
-                            comfort_index=analysis.get('comfort_index', 85),
-                            model_used=analysis.get('model', OPENROUTER_MODEL),
-                            timestamp=utc_now()
-                        )
-                        self.db.session.add(record)
-                        self.db.session.commit()
-                        logger.info("AI analysis persisted to database table 'ai_analysis'.")
-                    except Exception as dbe:
-                        self.db.session.rollback()
-                        logger.warning(f"Could not persist AI record to DB: {dbe}")
-                else:
-                    logger.info("No physical telemetry in database yet. Awaiting sensor stream.")
+            latest = db.query(self.weather_data_cls).order_by(self.weather_data_cls.timestamp.desc()).first()
+            if latest:
+                reading_dict = latest.to_dict()
+                analysis = perform_ai_analysis(reading_dict)
+                
+                # Persist AI inference to database
+                try:
+                    record = self.ai_analysis_cls(
+                        weather_type=analysis.get('weather_type', 'sunny'),
+                        vertical_label=analysis.get('vertical_label', "IT'S SUNNY"),
+                        headline=analysis.get('headline', ''),
+                        summary=analysis.get('summary', ''),
+                        clothing_advice=analysis.get('clothing_advice', ''),
+                        comfort_index=int(analysis.get('comfort_index', 85)),
+                        model_used=analysis.get('model', OPENROUTER_MODEL),
+                        timestamp=utc_now()
+                    )
+                    db.add(record)
+                    db.commit()
+                    logger.info("AI analysis persisted to database table 'ai_analysis'.")
+                except Exception as dbe:
+                    db.rollback()
+                    logger.warning(f"Could not persist AI record to DB: {dbe}")
+            else:
+                logger.info("No physical telemetry in database yet. Awaiting sensor stream.")
         except Exception as e:
             logger.error(f"Error during scheduled AI cycle: {e}")
+        finally:
+            try:
+                db.close()
+            except Exception:
+                pass
+
 
