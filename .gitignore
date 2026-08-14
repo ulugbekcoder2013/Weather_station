@@ -7,7 +7,7 @@ Thumbs.db
 .idea/
 *.iml
 
-# Android & Gradle Build Caches
+# Android & Gradle
 android/.gradle/
 android/.kotlin/
 android/build/
@@ -19,13 +19,23 @@ android/captures/
 build/
 app/build/
 
-# Server Database Runtime Temp
+# Server Environment & Logs
 server/.env
+server/data/*.sqlite
+server/data/*.sqlite-journal
+server/data/*.log
+server/logs/*.log
 server/app/instance/
+*.db
 *.db-shm
 *.db-wal
+*.sqlite
 
-# Python Runtime Temp
+# Tools & Temp
+tools/
+weather_station_backend_deploy.zip
+
+# Python & Scripts
 __pycache__/
 *.py[cod]
 *$py.class
@@ -33,3 +43,14 @@ __pycache__/
 venv/
 .env/
 .pio/
+
+# APK Binaries
+*.apk
+release_apk/
+!WeatherStation-Release.apk
+!WeatherStation-Latest.apk
+!WeatherStation-Debug.apk
+!release_apk/
+!release_apk/*.apk
+stitch_export/
+
