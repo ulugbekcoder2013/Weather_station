@@ -19,6 +19,7 @@ data class HomeUiState(
     val reading: WeatherReading? = null,
     val history: List<WeatherReading> = emptyList(),
     val isOnline: Boolean = true,
+    val isWebSocketLive: Boolean = false,
     val isRefreshing: Boolean = false,
     val errorMessage: String? = null
 )
@@ -34,9 +35,10 @@ class HomeViewModel(
     val temperatureUnit: StateFlow<TemperatureUnit> = preferencesManager.temperatureUnit
 
     private var autoRefreshJob: Job? = null
+    private var isWebSocketConnected: Boolean = false
 
     init {
-        // 1. Stream latest real telemetry from Room Database
+        // 1. Stream latest real telemetry from Room Database (updated by both WebSocket & REST)
         viewModelScope.launch {
             repository.getLatestReadingStream().collect { reading ->
                 if (reading != null) {
@@ -58,7 +60,16 @@ class HomeViewModel(
             }
         }
 
-        // 3. Trigger immediate network sync
+        // 3. Monitor persistent WebSocket status for Dual-Mode engine
+        viewModelScope.launch {
+            repository.getWebSocketConnectionStatus().collect { isConnected ->
+                isWebSocketConnected = isConnected
+                _uiState.value = _uiState.value.copy(isWebSocketLive = isConnected)
+                restartAutoRefreshLoop()
+            }
+        }
+
+        // 4. Trigger initial network sync
         refresh(manual = false)
         startAutoRefreshLoop()
     }
@@ -94,11 +105,18 @@ class HomeViewModel(
         }
     }
 
+    private fun restartAutoRefreshLoop() {
+        startAutoRefreshLoop()
+    }
+
     private fun startAutoRefreshLoop() {
         autoRefreshJob?.cancel()
         autoRefreshJob = viewModelScope.launch {
             while (isActive) {
-                delay(5000L) // Refresh live physical telemetry every 5s
+                // If WebSocket is actively streaming real-time frames, poll history every 30s
+                // If WebSocket is offline, fall back to aggressive 5s REST polling
+                val delayTime = if (isWebSocketConnected) 30000L else 5000L
+                delay(delayTime)
                 refresh(manual = false)
             }
         }

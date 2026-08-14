@@ -180,7 +180,7 @@ public:
     pct = constrain(pct, 0.0f, 100.0f);
 
     // Exponential Moving Average (EMA) smoothing for stable live readings
-    const float EMA_ALPHA = 0.25f;
+    const float EMA_ALPHA = 0.15f;
     if (!hasInitialLdr) {
       smoothedLdrVal = pct;
       hasInitialLdr = true;

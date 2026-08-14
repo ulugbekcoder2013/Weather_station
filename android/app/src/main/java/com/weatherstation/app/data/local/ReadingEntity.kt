@@ -7,7 +7,10 @@ import com.weatherstation.app.domain.model.WeatherReading
 
 @Entity(
     tableName = "cached_readings",
-    indices = [Index(value = ["recordedAt"]), Index(value = ["deviceId"])]
+    indices = [
+        Index(value = ["recordedAt", "deviceId"]),
+        Index(value = ["cachedAtTimestamp"])
+    ]
 )
 data class ReadingEntity(
     @PrimaryKey

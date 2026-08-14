@@ -27,6 +27,8 @@ server/data/*.log
 server/logs/*.log
 server/app/instance/
 *.db
+*.db-shm
+*.db-wal
 *.sqlite
 
 # Tools & Temp

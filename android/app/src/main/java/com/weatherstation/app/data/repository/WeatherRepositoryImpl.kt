@@ -5,13 +5,17 @@ import com.weatherstation.app.data.local.ReadingEntity
 import com.weatherstation.app.data.preferences.UserPreferencesManager
 import com.weatherstation.app.data.remote.AuthInterceptor
 import com.weatherstation.app.data.remote.WeatherApiService
+import com.weatherstation.app.data.remote.WeatherWebSocketManager
 import com.weatherstation.app.domain.model.DeviceHealth
 import com.weatherstation.app.domain.model.WeatherReading
 import com.weatherstation.app.domain.model.WeatherStats
 import com.weatherstation.app.domain.repository.WeatherRepository
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -24,8 +28,31 @@ class WeatherRepositoryImpl(
     private val preferencesManager: UserPreferencesManager
 ) : WeatherRepository {
 
+    private val repositoryScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var currentBaseUrl: String = ""
     private var apiService: WeatherApiService = createApiService(preferencesManager.serverUrl.value)
+
+    // Dual-Mode Real-Time WebSocket Streaming Engine
+    private val webSocketManager = WeatherWebSocketManager(
+        preferencesManager = preferencesManager,
+        scope = repositoryScope,
+        onReadingReceived = { liveReading ->
+            // Sub-millisecond persistence into Room DB upon WebSocket packet reception
+            readingDao.insertReading(ReadingEntity.fromDomain(liveReading))
+        }
+    )
+
+    init {
+        // Start persistent WebSocket connection
+        webSocketManager.start()
+
+        // Listen for server URL changes to reconnect WebSocket
+        repositoryScope.launch {
+            preferencesManager.serverUrl.collect {
+                webSocketManager.start()
+            }
+        }
+    }
 
     private fun createApiService(baseUrl: String): WeatherApiService {
         currentBaseUrl = baseUrl
@@ -72,6 +99,10 @@ class WeatherRepositoryImpl(
         return readingDao.getAllReadingsFlow().map { entities ->
             entities.map { it.toDomain() }
         }
+    }
+
+    override fun getWebSocketConnectionStatus(): Flow<Boolean> {
+        return webSocketManager.isConnected
     }
 
     override suspend fun refreshLatest(): Result<WeatherReading> = withContext(Dispatchers.IO) {
@@ -221,5 +252,10 @@ class WeatherRepositoryImpl(
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    override suspend fun purgeStaleData(retentionDays: Int): Int = withContext(Dispatchers.IO) {
+        val expiryTimestamp = System.currentTimeMillis() - (retentionDays * 86_400_000L)
+        readingDao.purgeOlderThan(expiryTimestamp)
     }
 }

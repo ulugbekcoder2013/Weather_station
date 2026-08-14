@@ -189,12 +189,33 @@ fun HomeScreen(
                         ) {
                             Text(text = "📍", fontSize = 14.sp)
                             Column {
-                                Text(
-                                    text = reading.deviceId,
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextWhitePrimary
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(
+                                        text = reading.deviceId,
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = TextWhitePrimary
+                                    )
+                                    if (uiState.isWebSocketLive) {
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(4.dp))
+                                                .background(Color(0xFF10B981).copy(alpha = 0.25f))
+                                                .border(0.5.dp, Color(0xFF10B981), RoundedCornerShape(4.dp))
+                                                .padding(horizontal = 4.dp, vertical = 1.dp)
+                                        ) {
+                                            Text(
+                                                text = "LIVE",
+                                                color = Color(0xFF34D399),
+                                                fontSize = 8.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
                                 Text(
                                     text = "Sensor station",
                                     fontSize = 10.sp,
@@ -307,12 +328,33 @@ fun HomeScreen(
                             ) {
                                 Text(text = "📍", fontSize = 18.sp)
                                 Column {
-                                    Text(
-                                        text = reading.deviceId,
-                                        fontSize = 20.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = TextWhitePrimary
-                                    )
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Text(
+                                            text = reading.deviceId,
+                                            fontSize = 20.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = TextWhitePrimary
+                                        )
+                                        if (uiState.isWebSocketLive) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(6.dp))
+                                                    .background(Color(0xFF10B981).copy(alpha = 0.25f))
+                                                    .border(0.5.dp, Color(0xFF10B981), RoundedCornerShape(6.dp))
+                                                    .padding(horizontal = 5.dp, vertical = 1.dp)
+                                            ) {
+                                                Text(
+                                                    text = "LIVE",
+                                                    color = Color(0xFF34D399),
+                                                    fontSize = 9.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                    }
                                     Text(
                                         text = "Sensor station",
                                         fontSize = 11.sp,

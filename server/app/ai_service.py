@@ -225,7 +225,17 @@ def _heuristic_weather_type(reading: dict) -> str:
     sun = reading.get('sun_activity', 50.0)
     hum = reading.get('humidity', 50.0)
 
-    current_hour = utc_now().hour
+    # Determine explicit hour if provided in reading timestamp
+    current_hour = None
+    recorded_at = reading.get('recorded_at') or reading.get('timestamp')
+    if recorded_at:
+        try:
+            if 'T' in str(recorded_at):
+                current_hour = int(str(recorded_at).split('T')[1].split(':')[0])
+            elif ' ' in str(recorded_at):
+                current_hour = int(str(recorded_at).split(' ')[1].split(':')[0])
+        except Exception:
+            pass
 
     if is_rain:
         if temp > 18 and hum > 85:
@@ -235,11 +245,18 @@ def _heuristic_weather_type(reading: dict) -> str:
         return "snow"
     if hum > 88 and sun < 30:
         return "foggy"
-    if sun < 15 or current_hour < 6 or current_hour >= 21:
+    if sun < 15:
         return "nighttime"
-    if (18 <= current_hour < 21) or (20 <= sun < 50 and current_hour >= 16):
+    if sun >= 60:
+        return "sunny"
+
+    # If sun is moderate (15 <= sun < 60), use time of day if available or current UTC
+    hour = current_hour if current_hour is not None else utc_now().hour
+    if hour < 6 or hour >= 21:
+        return "nighttime"
+    if (18 <= hour < 21) or (20 <= sun < 50 and hour >= 16):
         return "sunset"
-    if (5 <= current_hour < 8) and sun < 50:
+    if (5 <= hour < 8) and sun < 50:
         return "sunrise"
     return "sunny"
 

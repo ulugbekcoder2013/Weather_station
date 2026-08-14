@@ -44,6 +44,9 @@ class WeatherSyncWorker(
                 }
             }
 
+            // Automated maintenance: purge readings older than 90 days
+            repository.purgeStaleData(retentionDays = 90)
+
             // Trigger Widget Update
             val intent = Intent(context, WeatherAppWidgetProvider::class.java).apply {
                 action = AppWidgetManager.ACTION_APPWIDGET_UPDATE
