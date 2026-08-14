@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Aura Weather — Hyper-Minimalist Ambient Weather Experience</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@200;300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+                        mono: ['"JetBrains Mono"', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+
+        body {
+            background-color: #07090e;
+            color: #ffffff;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            overflow-x: hidden;
+        }
+
+        /* Glassmorphism Classes */
+        .glass-pill {
+            background: rgba(255, 255, 255, 0.22);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.15);
+        }
+
+        .phone-frame {
+            width: 390px;
+            height: 844px;
+            border-radius: 54px;
+            box-shadow: 0 0 0 12px #1e293b, 0 35px 100px rgba(0,0,0,0.85);
+            position: relative;
+            overflow: hidden;
+            background: #000;
+        }
+
+        /* Organic Wave Bottom Sheet */
+        .wave-sheet {
+            background: #FFFFFF;
+            border-top-left-radius: 38px;
+            border-top-right-radius: 38px;
+            box-shadow: 0 -25px 60px rgba(0, 0, 0, 0.18);
+            position: relative;
+        }
+
+        .wave-curve-overlay {
+            position: absolute;
+            top: -24px;
+            left: 0;
+            right: 0;
+            height: 25px;
+            pointer-events: none;
+        }
+
+        /* 3D Glossy Icon Volumetric Effects */
+        .icon-3d-sun {
+            background: radial-gradient(circle at 35% 30%, #FFF4B8 0%, #FFD000 45%, #FF8C00 100%);
+            box-shadow: 0 6px 20px rgba(255, 165, 0, 0.55), inset 0 2px 4px rgba(255, 255, 255, 0.85), inset 0 -3px 6px rgba(180, 80, 0, 0.4);
+        }
+
+        .icon-3d-moon {
+            background: radial-gradient(circle at 35% 30%, #FFFFFF 0%, #E2E8F0 50%, #94A3B8 100%);
+            box-shadow: 0 6px 20px rgba(148, 163, 184, 0.45), inset 0 2px 4px rgba(255, 255, 255, 0.9), inset 0 -3px 6px rgba(71, 85, 105, 0.4);
+        }
+
+        .icon-3d-cloud {
+            background: linear-gradient(180deg, #FFFFFF 0%, #F1F5F9 60%, #CBD5E1 100%);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1), inset 0 2px 3px rgba(255, 255, 255, 0.9);
+        }
+
+        .icon-3d-cloud-dark {
+            background: linear-gradient(180deg, #64748B 0%, #475569 60%, #334155 100%);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25), inset 0 2px 3px rgba(255, 255, 255, 0.4);
+        }
+
+        .icon-3d-rain-drop {
+            background: linear-gradient(180deg, #60A5FA 0%, #2563EB 100%);
+            box-shadow: 0 2px 6px rgba(37, 99, 235, 0.4), inset 0 1px 2px rgba(255, 255, 255, 0.8);
+        }
+
+        .icon-3d-lightning {
+            background: linear-gradient(180deg, #FDE047 0%, #EAB308 100%);
+            box-shadow: 0 0 12px rgba(250, 204, 21, 0.8);
+        }
+
+        .icon-3d-snow {
+            background: linear-gradient(180deg, #E0F2FE 0%, #BAE6FD 100%);
+            box-shadow: 0 2px 8px rgba(186, 230, 253, 0.6);
+        }
+
+        /* Micro-interactions */
+        .pressable {
+            transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.15s ease;
+        }
+        .pressable:active {
+            transform: scale(0.93);
+            opacity: 0.85;
+        }
+
+        /* Background Cross-fade Transition */
+        .bg-layer {
+            transition: opacity 0.65s cubic-bezier(0.4, 0, 0.2, 1), transform 0.65s ease-out;
+        }
+
+        /* Subtle weather particles */
+        @keyframes rainFall {
+            0% { transform: translateY(-100%) translateX(0); opacity: 0; }
+            50% { opacity: 0.7; }
+            100% { transform: translateY(800px) translateX(-30px); opacity: 0.1; }
+        }
+        .rain-streak {
+            position: absolute;
+            background: linear-gradient(180deg, transparent, rgba(255,255,255,0.6));
+            width: 1.5px;
+            height: 35px;
+            animation: rainFall 0.8s linear infinite;
+        }
+
+        @keyframes snowFall {
+            0% { transform: translateY(-20px) translateX(0) rotate(0deg); opacity: 0; }
+            30% { opacity: 0.8; }
+            100% { transform: translateY(820px) translateX(40px) rotate(360deg); opacity: 0; }
+        }
+        .snow-flake {
+            position: absolute;
+            background: white;
+            border-radius: 50%;
+            animation: snowFall var(--speed, 4s) linear infinite;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4 lg:p-8">
+
+    <!-- App Container -->
+    <div class="flex flex-col xl:flex-row items-center gap-8 xl:gap-14 max-w-7xl w-full justify-center">
+
+        <!-- Interactive Phone Canvas (Mobile 390x844) -->
+        <div class="phone-frame flex flex-col justify-between select-none">
+            
+            <!-- Dynamic Background Layers for All Weather & Times -->
+            <div id="bg-container" class="absolute inset-0 z-0 overflow-hidden">
+                <!-- 1. Sunny Day -->
+                <img id="bg-daytime" src="assets/weather_bg_daytime_1786683717159.jpg" 
+                     class="bg-layer absolute inset-0 w-full h-full object-cover opacity-100 scale-100" alt="Daytime Sky">
+                
+                <!-- 2. Sunset Golden Hour -->
+                <img id="bg-sunset" src="assets/weather_bg_sunset_1786683748244.jpg" 
+                     class="bg-layer absolute inset-0 w-full h-full object-cover opacity-0 scale-105" alt="Sunset Sky">
+
+                <!-- 3. Twilight Night -->
+                <img id="bg-nighttime" src="assets/weather_bg_nighttime_1786683730482.jpg" 
+                     class="bg-layer absolute inset-0 w-full h-full object-cover opacity-0 scale-105" alt="Night Sky">
+
+                <!-- 4. Sunrise Dawn -->
+                <img id="bg-sunrise" src="assets/weather_bg_sunrise_1786683822266.jpg" 
+                     class="bg-layer absolute inset-0 w-full h-full object-cover opacity-0 scale-105" alt="Sunrise Dawn">
+
+                <!-- 5. Rain -->
+                <img id="bg-rain" src="assets/weather_bg_rain_1786683777089.jpg" 
+                     class="bg-layer absolute inset-0 w-full h-full object-cover opacity-0 scale-105" alt="Rainy Sky">
+
+                <!-- 6. Thunderstorm -->
+                <img id="bg-thunderstorm" src="assets/weather_bg_thunderstorm_1786683792498.jpg" 
+                     class="bg-layer absolute inset-0 w-full h-full object-cover opacity-0 scale-105" alt="Thunderstorm Sky">
+
+                <!-- 7. Snow -->
+                <img id="bg-snow" src="assets/weather_bg_snow_1786683806476.jpg" 
+                     class="bg-layer absolute inset-0 w-full h-full object-cover opacity-0 scale-105" alt="Snow Sky">
+
+                <!-- 8. Fog / Mist -->
+                <img id="bg-foggy" src="assets/weather_bg_foggy_1786683850585.jpg" 
+                     class="bg-layer absolute inset-0 w-full h-full object-cover opacity-0 scale-105" alt="Foggy Sky">
+
+                <!-- Dynamic Weather Particle Canvas (Rain / Snow) -->
+                <div id="weather-particles" class="absolute inset-0 pointer-events-none z-10"></div>
+            </div>
+
+            <!-- Top Navigation Bar -->
+            <header class="relative z-20 flex justify-between items-center px-7 pt-12 pb-3">
+                <div class="pressable cursor-pointer flex items-center gap-2">
+                    <span class="text-base drop-shadow">📍</span>
+                    <div class="flex flex-col">
+                        <span id="city-name" class="font-semibold text-[17px] tracking-tight text-white drop-shadow-md">Tuscany</span>
+                        <span id="date-label" class="text-[11px] font-medium text-white/80 tracking-wide">Today, Oct 18</span>
+                    </div>
+                </div>
+
+                <button aria-label="Menu" class="pressable w-10 h-10 rounded-full flex flex-col justify-center items-end gap-1.5 px-2.5 glass-pill hover:bg-white/30 transition-colors">
+                    <span class="w-5 h-[2px] bg-white rounded-full shadow-sm"></span>
+                    <span class="w-3.5 h-[2px] bg-white rounded-full shadow-sm"></span>
+                </button>
+            </header>
+
+            <!-- Hero Section: Main Temperature, Humidity Capsule, Vertical Accent -->
+            <main class="relative z-20 px-7 pt-1 flex justify-between items-start">
+                <div class="flex flex-col">
+                    <!-- Hero Temperature -->
+                    <div class="flex items-start">
+                        <span id="hero-temp-value" class="text-[106px] font-extralight text-white leading-none tracking-tighter drop-shadow-md transition-all duration-300">23</span>
+                        <span class="text-[44px] font-light text-white/95 leading-none pt-2 tracking-normal">°</span>
+                    </div>
+
+                    <!-- Humidity Badge Capsule -->
+                    <div id="humidity-badge" class="pressable glass-pill rounded-full px-3.5 py-1.5 mt-2 inline-flex items-center gap-2 self-start cursor-pointer hover:scale-105 transition-transform">
+                        <div id="humidity-icon" class="w-3.5 h-3.5 rounded-full icon-3d-rain-drop flex items-center justify-center">
+                            <div class="w-1 h-1 bg-white rounded-full"></div>
+                        </div>
+                        <span id="humidity-text" class="text-[11px] font-bold tracking-wider text-white">62% HUMIDITY</span>
+                    </div>
+                </div>
+
+                <!-- Vertical Editorial Small-Caps Accent -->
+                <div class="pt-6 pr-1 flex flex-col items-center">
+                    <span id="vertical-label" class="text-[11px] font-bold text-white/90 tracking-[0.28em] uppercase [writing-mode:vertical-rl] rotate-180 drop-shadow-md transition-all duration-300">
+                        It's Sunny
+                    </span>
+                </div>
+            </main>
+
+            <!-- Bottom Sheet: Weather Today (Organic Wave Surface) -->
+            <div class="relative z-30 wave-sheet pt-6 pb-9 px-6 mt-auto">
+                <!-- Top Smooth Sinusoidal Curve SVG -->
+                <svg class="wave-curve-overlay w-full" viewBox="0 0 390 25" preserveAspectRatio="none" fill="#FFFFFF">
+                    <path d="M0 25 C100 0 290 0 390 25 L390 25 L0 25 Z"></path>
+                </svg>
+
+                <!-- Sheet Handle Pill -->
+                <div class="w-10 h-1 bg-slate-200/90 rounded-full mx-auto mb-4"></div>
+
+                <!-- Sheet Header -->
+                <div class="flex justify-between items-center mb-5 px-1">
+                    <h2 class="text-[18px] font-extrabold text-slate-800 tracking-tight">Weather Today</h2>
+                    <span id="condition-tag" class="text-[12px] font-semibold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full transition-colors">Sunny Day</span>
+                </div>
+
+                <!-- 4-Slot Forecast Grid (Matching Ref Exact Mood Board) -->
+                <div id="forecast-row" class="grid grid-cols-4 gap-2 text-center">
+                    
+                    <!-- Slot 1 -->
+                    <div class="pressable flex flex-col items-center gap-1.5 p-1 rounded-2xl hover:bg-slate-50 transition-colors cursor-pointer">
+                        <span id="f1-time" class="text-[11px] font-semibold text-slate-400">05:00 AM</span>
+                        <div class="w-12 h-12 flex items-center justify-center my-1" id="f1-icon">
+                            <!-- 3D Glossy Sun -->
+                            <div class="w-9 h-9 rounded-full icon-3d-sun relative flex items-center justify-center">
+                                <div class="w-2.5 h-2.5 rounded-full bg-white/60 blur-[0.5px] -mt-2 -ml-2"></div>
+                            </div>
+                        </div>
+                        <span id="f1-temp" class="text-[17px] font-bold text-slate-800 tracking-tight">23°</span>
+                    </div>
+
+                    <!-- Slot 2 -->
+                    <div class="pressable flex flex-col items-center gap-1.5 p-1 rounded-2xl hover:bg-slate-50 transition-colors cursor-pointer">
+                        <span id="f2-time" class="text-[11px] font-semibold text-slate-400">06:00 AM</span>
+                        <div class="w-12 h-12 flex items-center justify-center my-1 relative" id="f2-icon">
+                            <!-- 3D Cloud + Sun Peeking -->
+                            <div class="w-6 h-6 rounded-full icon-3d-sun absolute top-1 right-2"></div>
+                            <div class="w-10 h-6.5 rounded-full icon-3d-cloud relative z-10 flex items-center justify-center mt-2.5 border border-white/80">
+                                <div class="w-4 h-2 bg-white/70 rounded-full blur-[0.5px] -mt-1"></div>
+                            </div>
+                        </div>
+                        <span id="f2-temp" class="text-[17px] font-bold text-slate-800 tracking-tight">16°</span>
+                    </div>
+
+                    <!-- Slot 3 -->
+                    <div class="pressable flex flex-col items-center gap-1.5 p-1 rounded-2xl hover:bg-slate-50 transition-colors cursor-pointer">
+                        <span id="f3-time" class="text-[11px] font-semibold text-slate-400">07:00 AM</span>
+                        <div class="w-12 h-12 flex items-center justify-center my-1 relative" id="f3-icon">
+                            <!-- 3D Cloud + Rain Drops -->
+                            <div class="w-10 h-6.5 rounded-full icon-3d-cloud relative z-10 flex items-center justify-center border border-white/80">
+                                <div class="w-4 h-2 bg-white/70 rounded-full blur-[0.5px] -mt-1"></div>
+                            </div>
+                            <div class="absolute -bottom-0.5 flex gap-1.5 z-20">
+                                <div class="w-1.5 h-3 rounded-full icon-3d-rain-drop rotate-12"></div>
+                                <div class="w-1.5 h-3 rounded-full icon-3d-rain-drop rotate-12"></div>
+                            </div>
+                        </div>
+                        <span id="f3-temp" class="text-[17px] font-bold text-slate-800 tracking-tight">3°</span>
+                    </div>
+
+                    <!-- Slot 4 -->
+                    <div class="pressable flex flex-col items-center gap-1.5 p-1 rounded-2xl hover:bg-slate-50 transition-colors cursor-pointer">
+                        <span id="f4-time" class="text-[11px] font-semibold text-slate-400">08:00 AM</span>
+                        <div class="w-12 h-12 flex items-center justify-center my-1" id="f4-icon">
+                            <!-- 3D Glossy Radiant Sun -->
+                            <div class="w-9 h-9 rounded-full icon-3d-sun relative flex items-center justify-center">
+                                <div class="w-2.5 h-2.5 rounded-full bg-white/60 blur-[0.5px] -mt-2 -ml-2"></div>
+                            </div>
+                        </div>
+                        <span id="f4-temp" class="text-[17px] font-bold text-slate-800 tracking-tight">23°</span>
+                    </div>
+
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Weather & Time Conditions Switcher Panel -->
+        <div class="w-full max-w-lg bg-slate-900/95 border border-slate-800 rounded-3xl p-6 lg:p-8 backdrop-blur-xl shadow-2xl flex flex-col gap-6">
+            <div>
+                <div class="flex items-center gap-2 mb-1">
+                    <span class="w-2.5 h-2.5 rounded-full bg-indigo-400 animate-pulse"></span>
+                    <span class="text-xs font-mono font-semibold tracking-wider text-indigo-400 uppercase">Atmosphere Engine</span>
+                </div>
+                <h1 class="text-2xl font-extrabold text-white tracking-tight">Weather & Time Presets</h1>
+                <p class="text-xs text-slate-400 mt-1 leading-relaxed">
+                    Select any weather condition or time of day to preview the illustrated background, atmosphere, and 3D icons.
+                </p>
+            </div>
+
+            <!-- 8 Weather & Time Modes Grid -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                <!-- 1. Sunny Day -->
+                <button onclick="setWeatherState('daytime')" id="btn-daytime" class="weather-btn py-3 px-2 rounded-2xl bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs font-bold transition-all hover:scale-[1.02] flex flex-col items-center gap-1.5 shadow-sm">
+                    <span class="text-xl">☀️</span>
+                    <span>Sunny Day</span>
+                </button>
+
+                <!-- 2. Sunset -->
+                <button onclick="setWeatherState('sunset')" id="btn-sunset" class="weather-btn py-3 px-2 rounded-2xl bg-slate-800 text-slate-300 border border-slate-700 text-xs font-bold transition-all hover:scale-[1.02] flex flex-col items-center gap-1.5">
+                    <span class="text-xl">🌅</span>
+                    <span>Sunset</span>
+                </button>
+
+                <!-- 3. Night -->
+                <button onclick="setWeatherState('nighttime')" id="btn-nighttime" class="weather-btn py-3 px-2 rounded-2xl bg-slate-800 text-slate-300 border border-slate-700 text-xs font-bold transition-all hover:scale-[1.02] flex flex-col items-center gap-1.5">
+                    <span class="text-xl">🌙</span>
+                    <span>Night Moon</span>
+                </button>
+
+                <!-- 4. Sunrise -->
+                <button onclick="setWeatherState('sunrise')" id="btn-sunrise" class="weather-btn py-3 px-2 rounded-2xl bg-slate-800 text-slate-300 border border-slate-700 text-xs font-bold transition-all hover:scale-[1.02] flex flex-col items-center gap-1.5">
+                    <span class="text-xl">🌄</span>
+                    <span>Sunrise</span>
+                </button>
+
+                <!-- 5. Rain -->
+                <button onclick="setWeatherState('rain')" id="btn-rain" class="weather-btn py-3 px-2 rounded-2xl bg-slate-800 text-slate-300 border border-slate-700 text-xs font-bold transition-all hover:scale-[1.02] flex flex-col items-center gap-1.5">
+                    <span class="text-xl">🌧️</span>
+                    <span>Rainy Day</span>
+                </button>
+
+                <!-- 6. Thunderstorm -->
+                <button onclick="setWeatherState('thunderstorm')" id="btn-thunderstorm" class="weather-btn py-3 px-2 rounded-2xl bg-slate-800 text-slate-300 border border-slate-700 text-xs font-bold transition-all hover:scale-[1.02] flex flex-col items-center gap-1.5">
+                    <span class="text-xl">⛈️</span>
+                    <span>Thunderstorm</span>
+                </button>
+
+                <!-- 7. Snow -->
+                <button onclick="setWeatherState('snow')" id="btn-snow" class="weather-btn py-3 px-2 rounded-2xl bg-slate-800 text-slate-300 border border-slate-700 text-xs font-bold transition-all hover:scale-[1.02] flex flex-col items-center gap-1.5">
+                    <span class="text-xl">❄️</span>
+                    <span>Winter Snow</span>
+                </button>
+
+                <!-- 8. Foggy -->
+                <button onclick="setWeatherState('foggy')" id="btn-foggy" class="weather-btn py-3 px-2 rounded-2xl bg-slate-800 text-slate-300 border border-slate-700 text-xs font-bold transition-all hover:scale-[1.02] flex flex-col items-center gap-1.5">
+                    <span class="text-xl">🌫️</span>
+                    <span>Misty Fog</span>
+                </button>
+            </div>
+
+            <!-- Active Weather Telemetry Summary -->
+            <div class="bg-slate-950/70 rounded-2xl p-4 border border-slate-800/80 text-xs font-mono space-y-2 text-slate-300">
+                <div class="flex justify-between">
+                    <span class="text-slate-500">Condition Description:</span>
+                    <span id="active-desc" class="text-amber-400 font-semibold">Sunny & Clear Tuscan Skies</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-500">Ambient Temperature:</span>
+                    <span id="active-temp" class="text-white font-bold">23° C (73° F)</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-500">Atmospheric Moisture:</span>
+                    <span id="active-hum" class="text-sky-400">62% Humidity</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-500">Wind Velocity:</span>
+                    <span id="active-wind" class="text-emerald-400">4.2 km/h Gentle Breeze</span>
+                </div>
+            </div>
+
+            <!-- 3D Icon Preview Thumbnail Sheet -->
+            <div class="border border-slate-800 rounded-2xl p-3 bg-slate-950/40 flex items-center gap-3">
+                <img src="assets/weather_icons_set_1786683760782.jpg" class="w-14 h-14 rounded-xl object-cover border border-slate-700" alt="3D Icons">
+                <div class="flex flex-col text-xs">
+                    <span class="font-bold text-white">Volumetric 3D Glossy Icon Set</span>
+                    <span class="text-slate-400 text-[11px]">Matching reference mood board 1:1</span>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Live Weather Switching Logic -->
+    <script>
+        const weatherStates = {
+            daytime: {
+                bgId: 'bg-daytime',
+                temp: '23',
+                humidity: '62% HUMIDITY',
+                vertical: "IT'S SUNNY",
+                tag: 'Sunny Day',
+                tagClass: 'text-amber-600 bg-amber-50',
+                desc: 'Sunny & Clear Tuscan Skies',
+                tempStr: '23° C (73° F)',
+                humStr: '62% Humidity',
+                windStr: '4.2 km/h Gentle Breeze',
+                btnColor: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
+                fTemps: ['23°', '16°', '3°', '23°'],
+                particles: 'none'
+            },
+            sunset: {
+                bgId: 'bg-sunset',
+                temp: '23',
+                humidity: '68% HUMIDITY',
+                vertical: "IT'S SUNNY",
+                tag: 'Golden Sunset',
+                tagClass: 'text-orange-600 bg-orange-50',
+                desc: 'Radiant Tuscan Sunset & Ambient Glow',
+                tempStr: '23° C (73° F)',
+                humStr: '68% Humidity',
+                windStr: '3.1 km/h Soft Dusk Wind',
+                btnColor: 'bg-orange-500/20 text-orange-300 border-orange-500/40',
+                fTemps: ['23°', '21°', '18°', '15°'],
+                particles: 'none'
+            },
+            nighttime: {
+                bgId: 'bg-nighttime',
+                temp: '10',
+                humidity: '84% HUMIDITY',
+                vertical: "IT'S CLEAR",
+                tag: 'Moonlit Night',
+                tagClass: 'text-indigo-600 bg-indigo-50',
+                desc: 'Deep Twilight Sky & Lunar Glow',
+                tempStr: '10° C (50° F)',
+                humStr: '84% Humidity',
+                windStr: '2.4 km/h Calm Night Air',
+                btnColor: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40',
+                fTemps: ['10°', '9°', '8°', '7°'],
+                particles: 'none'
+            },
+            sunrise: {
+                bgId: 'bg-sunrise',
+                temp: '14',
+                humidity: '76% HUMIDITY',
+                vertical: "SUNRISE",
+                tag: 'Morning Dawn',
+                tagClass: 'text-rose-600 bg-rose-50',
+                desc: 'Pastel Dawn & Valley Dew Mist',
+                tempStr: '14° C (57° F)',
+                humStr: '76% Humidity',
+                windStr: '1.8 km/h Morning Breeze',
+                btnColor: 'bg-rose-500/20 text-rose-300 border-rose-500/40',
+                fTemps: ['14°', '17°', '20°', '22°'],
+                particles: 'none'
+            },
+            rain: {
+                bgId: 'bg-rain',
+                temp: '16',
+                humidity: '92% HUMIDITY',
+                vertical: "IT'S RAINING",
+                tag: 'Light Rain',
+                tagClass: 'text-blue-600 bg-blue-50',
+                desc: 'Gentle Rain Showers over Rolling Valleys',
+                tempStr: '16° C (61° F)',
+                humStr: '92% Humidity',
+                windStr: '8.5 km/h Cool Rain Gusts',
+                btnColor: 'bg-blue-500/20 text-blue-300 border-blue-500/40',
+                fTemps: ['16°', '15°', '14°', '15°'],
+                particles: 'rain'
+            },
+            thunderstorm: {
+                bgId: 'bg-thunderstorm',
+                temp: '18',
+                humidity: '96% HUMIDITY',
+                vertical: "THUNDERSTORM",
+                tag: 'Storm Warning',
+                tagClass: 'text-purple-600 bg-purple-50',
+                desc: 'Atmospheric Thunder & Lightning Flash',
+                tempStr: '18° C (64° F)',
+                humStr: '96% Humidity',
+                windStr: '22.4 km/h Storm Winds',
+                btnColor: 'bg-purple-500/20 text-purple-300 border-purple-500/40',
+                fTemps: ['18°', '16°', '14°', '15°'],
+                particles: 'rain'
+            },
+            snow: {
+                bgId: 'bg-snow',
+                temp: '-2',
+                humidity: '65% HUMIDITY',
+                vertical: "IT'S SNOWING",
+                tag: 'Winter Snow',
+                tagClass: 'text-cyan-600 bg-cyan-50',
+                desc: 'Fresh Powder Snow over Frozen Hills',
+                tempStr: '-2° C (28° F)',
+                humStr: '65% Humidity',
+                windStr: '5.6 km/h Crisp Winter Breeze',
+                btnColor: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40',
+                fTemps: ['-2°', '-1°', '0°', '-3°'],
+                particles: 'snow'
+            },
+            foggy: {
+                bgId: 'bg-foggy',
+                temp: '12',
+                humidity: '88% HUMIDITY',
+                vertical: "MISTY FOG",
+                tag: 'Dense Fog',
+                tagClass: 'text-slate-600 bg-slate-100',
+                desc: 'Ethereal Silver Mist in Hills',
+                tempStr: '12° C (54° F)',
+                humStr: '88% Humidity',
+                windStr: '1.2 km/h Still Air',
+                btnColor: 'bg-slate-500/20 text-slate-300 border-slate-500/40',
+                fTemps: ['12°', '13°', '15°', '16°'],
+                particles: 'none'
+            }
+        };
+
+        const bgImages = ['bg-daytime', 'bg-sunset', 'bg-nighttime', 'bg-sunrise', 'bg-rain', 'bg-thunderstorm', 'bg-snow', 'bg-foggy'];
+
+        function setWeatherState(stateKey) {
+            const data = weatherStates[stateKey];
+            if (!data) return;
+
+            // 1. Cross-fade Background Image
+            bgImages.forEach(id => {
+                const el = document.getElementById(id);
+                if (id === data.bgId) {
+                    el.classList.remove('opacity-0', 'scale-105');
+                    el.classList.add('opacity-100', 'scale-100');
+                } else {
+                    el.classList.remove('opacity-100', 'scale-100');
+                    el.classList.add('opacity-0', 'scale-105');
+                }
+            });
+
+            // 2. Update Typography & Content
+            document.getElementById('hero-temp-value').innerText = data.temp;
+            document.getElementById('humidity-text').innerText = data.humidity;
+            document.getElementById('vertical-label').innerText = data.vertical;
+
+            const conditionTag = document.getElementById('condition-tag');
+            conditionTag.innerText = data.tag;
+            conditionTag.className = `text-[12px] font-semibold px-3 py-1 rounded-full transition-colors ${data.tagClass}`;
+
+            // Forecast temps
+            document.getElementById('f1-temp').innerText = data.fTemps[0];
+            document.getElementById('f2-temp').innerText = data.fTemps[1];
+            document.getElementById('f3-temp').innerText = data.fTemps[2];
+            document.getElementById('f4-temp').innerText = data.fTemps[3];
+
+            // Telemetry box
+            document.getElementById('active-desc').innerText = data.desc;
+            document.getElementById('active-temp').innerText = data.tempStr;
+            document.getElementById('active-hum').innerText = data.humStr;
+            document.getElementById('active-wind').innerText = data.windStr;
+
+            // 3. Reset Button States
+            document.querySelectorAll('.weather-btn').forEach(btn => {
+                btn.className = 'weather-btn py-3 px-2 rounded-2xl bg-slate-800 text-slate-300 border border-slate-700 text-xs font-bold transition-all hover:scale-[1.02] flex flex-col items-center gap-1.5';
+            });
+            const activeBtn = document.getElementById(`btn-${stateKey}`);
+            if (activeBtn) {
+                activeBtn.className = `weather-btn py-3 px-2 rounded-2xl text-xs font-bold transition-all hover:scale-[1.02] flex flex-col items-center gap-1.5 shadow-md ${data.btnColor}`;
+            }
+
+            // 4. Update Weather Particles (Rain / Snow)
+            renderParticles(data.particles);
+        }
+
+        function renderParticles(type) {
+            const container = document.getElementById('weather-particles');
+            container.innerHTML = '';
+            if (type === 'rain') {
+                for (let i = 0; i < 35; i++) {
+                    const drop = document.createElement('div');
+                    drop.className = 'rain-streak';
+                    drop.style.left = `${Math.random() * 100}%`;
+                    drop.style.top = `${Math.random() * -100}px`;
+                    drop.style.animationDelay = `${Math.random() * 1.5}s`;
+                    drop.style.animationDuration = `${0.6 + Math.random() * 0.4}s`;
+                    container.appendChild(drop);
+                }
+            } else if (type === 'snow') {
+                for (let i = 0; i < 40; i++) {
+                    const flake = document.createElement('div');
+                    flake.className = 'snow-flake';
+                    const size = Math.random() * 3 + 2;
+                    flake.style.width = `${size}px`;
+                    flake.style.height = `${size}px`;
+                    flake.style.left = `${Math.random() * 100}%`;
+                    flake.style.top = `${Math.random() * -50}px`;
+                    flake.style.setProperty('--speed', `${3 + Math.random() * 4}s`);
+                    flake.style.animationDelay = `${Math.random() * 3}s`;
+                    container.appendChild(flake);
+                }
+            }
+        }
+
+        // Initialize with Daytime
+        setWeatherState('daytime');
+    </script>
+</body>
+</html>
