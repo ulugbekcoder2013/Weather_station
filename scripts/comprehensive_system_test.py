@@ -162,7 +162,7 @@ def test_ai_service():
         "recorded_at": "2026-08-14 14:00:00"
     }
     prompt = ai_service._build_ai_prompt(sample_reading)
-    if "24.5°C" in prompt and "75.0%" in prompt and "Afternoon High Sun" in prompt:
+    if "24.5°C" in prompt and "75.0%" in prompt and "Midday / Afternoon" in prompt:
         report_pass("Prompt includes correct sensor metrics, time context, and schema.")
         passed += 1
     else:

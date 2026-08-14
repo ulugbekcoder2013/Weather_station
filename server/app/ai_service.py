@@ -69,8 +69,50 @@ def set_cached_ai_analysis(data: dict):
     with _cache_lock:
         _latest_ai_cache.update(data)
 
+def _get_time_context(reading_dict: dict) -> tuple:
+    """Extracts local time, hour, and descriptive astronomical time context."""
+    now_utc = utc_now()
+    recorded_at = reading_dict.get('recorded_at') or reading_dict.get('timestamp')
+    
+    local_dt = now_utc + timedelta(hours=5)
+    if recorded_at:
+        try:
+            ts_str = str(recorded_at)
+            if 'T' in ts_str:
+                ts_clean = ts_str.replace('Z', '')
+                parsed = datetime.fromisoformat(ts_clean)
+                if ts_str.endswith('Z'):
+                    local_dt = parsed + timedelta(hours=5)
+                else:
+                    local_dt = parsed
+            elif ' ' in ts_str:
+                local_dt = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
+        except Exception:
+            pass
+
+    hour = local_dt.hour
+    minute = local_dt.minute
+    time_str = f"{hour:02d}:{minute:02d}"
+
+    if hour < 5:
+        context = "Late Night / Midnight"
+    elif hour < 8:
+        context = "Early Dawn / Sunrise"
+    elif hour < 12:
+        context = "Morning"
+    elif hour < 17:
+        context = "Midday / Afternoon"
+    elif hour < 20:
+        context = "Golden Hour / Sunset"
+    elif hour < 22:
+        context = "Evening Twilight"
+    else:
+        context = "Nighttime"
+
+    return local_dt, hour, time_str, context
+
 def _build_ai_prompt(reading_dict: dict) -> str:
-    """Constructs a structured prompt for the LLM based on physical sensor data."""
+    """Constructs a structured prompt for the LLM based on physical sensor data and time of day."""
     temp_c = reading_dict.get('temperature', 22.0)
     temp_f = round(temp_c * 9/5 + 32, 1)
     humidity = reading_dict.get('humidity', 50.0)
@@ -78,24 +120,8 @@ def _build_ai_prompt(reading_dict: dict) -> str:
     pressure = reading_dict.get('pressure', 1013.25)
     wind_speed = reading_dict.get('wind_speed', 0.0)
     rain_detected = reading_dict.get('rain_detected', False)
-    recorded_at = reading_dict.get('recorded_at', utc_now().strftime("%Y-%m-%d %H:%M:%S"))
-
-    # Extract current local hour
-    current_hour = utc_now().hour
-    try:
-        if ' ' in str(recorded_at):
-            time_part = str(recorded_at).split(' ')[1]
-            current_hour = int(time_part.split(':')[0])
-    except Exception:
-        pass
-
-    time_context = (
-        "Early Dawn / Sunrise" if 5 <= current_hour < 8 else
-        "Morning" if 8 <= current_hour < 12 else
-        "Afternoon High Sun" if 12 <= current_hour < 17 else
-        "Golden Hour / Sunset" if 17 <= current_hour < 20 else
-        "Night Twilight / Moonlit"
-    )
+    
+    _, hour, time_str, time_context = _get_time_context(reading_dict)
 
     prompt = f"""You are an elite meteorological AI.
 Analyze the following physical sensor telemetry from our smart home weather station:
@@ -105,13 +131,19 @@ Analyze the following physical sensor telemetry from our smart home weather stat
 - Barometric Air Pressure: {pressure} hPa
 - Wind Velocity: {wind_speed} km/h
 - Rain Detection Sensor: {"RAIN DETECTED (Precipitation Active)" if rain_detected else "No Rain (Dry Surface)"}
-- Timestamp / Time of Day: {recorded_at} ({time_context})
+- Current Local Time: {time_str} ({time_context})
 
-Task: Determine the exact atmospheric condition and return a STRICT JSON object only.
+CRITICAL INSTRUCTION:
+Your analysis, headline, summary, and clothing recommendation MUST explicitly incorporate the current time of day ({time_context} at {time_str}).
+- If it is Nighttime or Midnight ({time_str}), analyze nocturnal climate, nocturnal temperature comfort, and sleep/evening clothing.
+- If it is Dawn / Morning, analyze morning air, sunrise transition, and morning attire.
+- If it is Midday or Afternoon, analyze peak daytime sun, UV considerations, and outdoor activities.
+- If it is Sunset / Dusk, analyze cooling dusk breezes and evening wear.
+
 Valid 'weather_type' values MUST be one of:
-- "sunny" (clear sky, high sunlight)
+- "sunny" (daytime clear sky / high light)
 - "sunset" (golden hour dusk, low sun, warm sky)
-- "nighttime" (night hours, low light, starry moonlit)
+- "nighttime" (night hours, moonlit, dark ambient)
 - "sunrise" (dawn, rising morning sun)
 - "rain" (active rain or high humidity precipitation)
 - "thunderstorm" (violent weather, pressure drop + rain)
@@ -121,10 +153,10 @@ Valid 'weather_type' values MUST be one of:
 JSON Output Schema:
 {{
   "weather_type": "<one of the valid weather types above>",
-  "vertical_label": "<2-3 words uppercase punchy editorial phrase, e.g. 'IT'S SUNNY', 'GOLDEN DUSK', 'TRANQUIL RAIN', 'MOONLIT NIGHT', 'CRISP WINTER'>",
-  "headline": "<elegant 3-6 word weather headline>",
-  "summary": "<1-2 concise sentences of high-end editorial meteorological description>",
-  "clothing_advice": "<actionable clothing and outdoor comfort suggestion>",
+  "vertical_label": "<2-3 words uppercase punchy editorial phrase, e.g. 'CLEAR NIGHT', 'IT'S SUNNY', 'GOLDEN DUSK', 'TRANQUIL RAIN', 'CRISP WINTER'>",
+  "headline": "<elegant 3-6 word weather headline incorporating time/atmosphere>",
+  "summary": "<1-2 concise sentences of high-end editorial meteorological description reflecting time of day and sensor data>",
+  "clothing_advice": "<actionable clothing and outdoor/indoor comfort suggestion for this specific time of day>",
   "comfort_index": <integer from 0 to 100 representing human biometeorological comfort>
 }}"""
     return prompt
@@ -200,7 +232,6 @@ def perform_ai_analysis(reading_dict: dict) -> dict:
                         else:
                             raise ValueError("Empty message content returned by model.")
 
-
                         parsed['analyzed_at'] = utc_now().isoformat() + "Z"
                         parsed['model'] = model_name
                         parsed['status'] = "success"
@@ -217,7 +248,6 @@ def perform_ai_analysis(reading_dict: dict) -> dict:
         except Exception as ex:
             logger.warning(f"Model {model_name} failed: {ex}. Trying next model...")
 
-
     # Fallback to smart heuristic if all models unavailable
     logger.error("All OpenRouter models failed. Falling back to local heuristic analysis.")
     heuristic_res = _heuristic_fallback(reading_dict)
@@ -225,23 +255,13 @@ def perform_ai_analysis(reading_dict: dict) -> dict:
     return heuristic_res
 
 def _heuristic_weather_type(reading: dict) -> str:
-    """Calculates weather condition type based on physical sensor rules."""
+    """Calculates weather condition type based on physical sensor rules and time of day."""
     is_rain = reading.get('rain_detected', False)
     temp = reading.get('temperature', 20.0)
     sun = reading.get('sun_activity', 50.0)
     hum = reading.get('humidity', 50.0)
 
-    # Determine explicit hour if provided in reading timestamp
-    current_hour = None
-    recorded_at = reading.get('recorded_at') or reading.get('timestamp')
-    if recorded_at:
-        try:
-            if 'T' in str(recorded_at):
-                current_hour = int(str(recorded_at).split('T')[1].split(':')[0])
-            elif ' ' in str(recorded_at):
-                current_hour = int(str(recorded_at).split(' ')[1].split(':')[0])
-        except Exception:
-            pass
+    _, hour, _, _ = _get_time_context(reading)
 
     if is_rain:
         if temp > 18 and hum > 85:
@@ -249,47 +269,118 @@ def _heuristic_weather_type(reading: dict) -> str:
         return "rain"
     if temp <= 1.5 and hum > 70:
         return "snow"
-    if hum > 88 and sun < 30:
+    if hum > 88 and sun < 35:
         return "foggy"
-    if sun < 15:
-        return "nighttime"
     if sun >= 60:
         return "sunny"
-
-    # If sun is moderate (15 <= sun < 60), use time of day if available or current UTC
-    hour = current_hour if current_hour is not None else utc_now().hour
-    if hour < 6 or hour >= 21:
+    if sun < 15:
         return "nighttime"
-    if (18 <= hour < 21) or (20 <= sun < 50 and hour >= 16):
-        return "sunset"
-    if (5 <= hour < 8) and sun < 50:
-        return "sunrise"
+
+    # Time-of-day astronomical mapping
+    if hour < 5 or hour >= 22:
+        return "nighttime"
+    if 5 <= hour < 8:
+        return "sunrise" if sun < 60 else "sunny"
+    if 19 <= hour < 22:
+        return "sunset" if sun < 60 else "sunny"
+
+    # Daytime (08:00 - 19:00)
     return "sunny"
 
 def _heuristic_fallback(reading: dict) -> dict:
+    """Generates hyper-refined, time-aware meteorological insights based on physical telemetry."""
     wtype = _heuristic_weather_type(reading)
     temp = reading.get('temperature', 22.0)
-    labels = {
-        "sunny": ("IT'S SUNNY", "Optimal Daylight Climate", "Comfortable lightweight clothing recommended.", 90),
-        "sunset": ("GOLDEN DUSK", "Serene Sunset Glow", "Pleasant evening climate; a light cardigan is ideal.", 85),
-        "nighttime": ("IT'S CLEAR", "Tranquil Night Atmosphere", "Cool night temperatures; jacket recommended if outdoors.", 80),
-        "sunrise": ("MORNING DAWN", "Fresh Dawn Atmosphere", "Cool morning breeze; light layers suggested.", 85),
-        "rain": ("IT'S RAINING", "Precipitation in Region", "Waterproof jacket or umbrella strongly recommended.", 60),
-        "thunderstorm": ("THUNDERSTORM", "Atmospheric Storm Warning", "Seek indoor shelter; high moisture and active rain.", 40),
-        "snow": ("IT'S SNOWING", "Winter Frost Conditions", "Heavy winter coat, gloves, and insulated footwear needed.", 55),
-        "foggy": ("MISTY FOG", "Dense Valley Mist", "Reduced visibility; moisture-resistant outer layer recommended.", 70)
-    }
-    label, headline, advice, comfort = labels.get(wtype, ("IT'S SUNNY", "Optimal Climate", "Comfortable attire.", 85))
+    hum = reading.get('humidity', 50.0)
+    sun = reading.get('sun_activity', 50.0)
+    
+    _, hour, time_str, time_context = _get_time_context(reading)
+
+    if wtype == "nighttime":
+        if temp >= 24.0:
+            label = "WARM NIGHT"
+            headline = f"Warm Midnight Climate ({time_str})"
+            summary = f"At {time_str} ({time_context}), ambient nocturnal temperature is comfortably warm at {temp:.1f}°C with {hum:.1f}% humidity under clear night skies."
+            advice = "Lightweight breathable nightwear recommended. Keep bedroom ventilated for optimal rest."
+            comfort = 88
+        elif temp < 16.0:
+            label = "CRISP NIGHT"
+            headline = f"Cool Night Atmosphere ({time_str})"
+            summary = f"At {time_str} ({time_context}), nighttime temperature drops to a crisp {temp:.1f}°C with {hum:.1f}% relative humidity."
+            advice = "Warm sleepwear and cozy layers recommended; light jacket if venturing outdoors."
+            comfort = 82
+        else:
+            label = "CLEAR NIGHT"
+            headline = f"Tranquil Nighttime Climate ({time_str})"
+            summary = f"At {time_str} ({time_context}), stable nocturnal conditions record {temp:.1f}°C and {hum:.1f}% relative humidity."
+            advice = "Comfortable night attire recommended for a restful evening."
+            comfort = 90
+
+    elif wtype == "sunrise":
+        label = "MORNING DAWN"
+        headline = f"Fresh Sunrise Awakening ({time_str})"
+        summary = f"At {time_str} ({time_context}), early morning light is emerging with ambient {temp:.1f}°C and {hum:.1f}% humidity."
+        advice = "Light morning layers; ideal conditions for early morning walks or fresh air."
+        comfort = 88
+
+    elif wtype == "sunset":
+        label = "GOLDEN DUSK"
+        headline = f"Serene Sunset Twilight ({time_str})"
+        summary = f"At {time_str} ({time_context}), golden hour twilight brings mild {temp:.1f}°C temperatures and {hum:.1f}% humidity."
+        advice = "Casual evening attire with a light cardigan or windbreaker for cooling dusk air."
+        comfort = 87
+
+    elif wtype == "sunny":
+        if temp >= 28.0:
+            label = "WARM SUN"
+            headline = f"Bright Solar Radiance ({time_str})"
+            summary = f"At {time_str} ({time_context}), radiant sunshine ({sun:.1f}%) warms ambient levels to {temp:.1f}°C with {hum:.1f}% humidity."
+            advice = "Breathable summer cottons, sunglasses, and UV skin protection recommended."
+            comfort = 84
+        else:
+            label = "IT'S SUNNY"
+            headline = f"Optimal Daylight Climate ({time_str})"
+            summary = f"At {time_str} ({time_context}), clear radiant daylight ({sun:.1f}% light) with balanced {temp:.1f}°C and {hum:.1f}% humidity."
+            advice = "Comfortable lightweight daytime attire and sunglasses for outdoor activities."
+            comfort = 92
+
+    elif wtype == "rain":
+        label = "IT'S RAINING"
+        headline = f"Active Precipitation at {time_str}"
+        summary = f"At {time_str} ({time_context}), rainfall detected with elevated humidity at {hum:.1f}% and ambient {temp:.1f}°C."
+        advice = "Waterproof jacket, umbrella, and non-slip footwear strongly recommended."
+        comfort = 62
+
+    elif wtype == "thunderstorm":
+        label = "THUNDERSTORM"
+        headline = f"Atmospheric Storm Alert ({time_str})"
+        summary = f"At {time_str} ({time_context}), heavy precipitation with storm moisture ({hum:.1f}%) and ambient {temp:.1f}°C."
+        advice = "Seek indoor shelter; avoid open exposed areas during active precipitation."
+        comfort = 40
+
+    elif wtype == "snow":
+        label = "IT'S SNOWING"
+        headline = f"Winter Frost Conditions ({time_str})"
+        summary = f"At {time_str} ({time_context}), freezing temperatures ({temp:.1f}°C) with winter snow/frost."
+        advice = "Heavy winter coat, insulated gloves, and warm footwear essential."
+        comfort = 55
+
+    else:  # foggy
+        label = "MISTY FOG"
+        headline = f"Dense Mist & Fog ({time_str})"
+        summary = f"At {time_str} ({time_context}), saturated air ({hum:.1f}% humidity) creating dense misty fog."
+        advice = "Moisture-resistant outer layer and caution in low visibility."
+        comfort = 70
 
     return {
         "weather_type": wtype,
         "vertical_label": label,
         "headline": headline,
-        "summary": f"Ambient temperature of {temp:.1f}°C with relative humidity at {reading.get('humidity', 50)}%.",
+        "summary": summary,
         "clothing_advice": advice,
         "comfort_index": comfort,
         "analyzed_at": utc_now().isoformat() + "Z",
-        "model": "heuristic_fallback",
+        "model": "heuristic_time_aware",
         "status": "fallback"
     }
 

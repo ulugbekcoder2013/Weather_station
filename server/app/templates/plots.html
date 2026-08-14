@@ -628,6 +628,55 @@
         }
     }
 
+    async function refreshAllDashboardData() {
+        const refreshSpinner = document.getElementById('refreshSpinner');
+        if (refreshSpinner) refreshSpinner.classList.add('animate-spin');
+
+        const rangeSelect = document.getElementById('timeRangeSelect');
+        const days = rangeSelect ? parseFloat(rangeSelect.value) : 1.0;
+
+        try {
+            // Fetch latest telemetry, time-aware AI insights, and history in parallel
+            const [latestRes, aiRes, histRes] = await Promise.all([
+                fetch(`/api/latest?_t=${Date.now()}`).then(r => r.json()).catch(() => null),
+                fetch(`/api/ai-analysis?_t=${Date.now()}`).then(r => r.json()).catch(() => null),
+                fetch(`/api/weather-history?days=${days}&_t=${Date.now()}`).then(r => r.json()).catch(() => null)
+            ]);
+
+            // Update latest telemetry cards & badges
+            if (latestRes && latestRes.data) {
+                const liveData = latestRes.data;
+                const existingIdx = weatherRecords.findIndex(r => r.id === liveData.id);
+                if (existingIdx === -1) {
+                    weatherRecords.push(liveData);
+                    if (weatherRecords.length > 500) weatherRecords.shift();
+                } else {
+                    weatherRecords[existingIdx] = liveData;
+                }
+                updateDashboardUI(weatherRecords);
+                appendLiveReadingToCharts(liveData);
+            }
+
+            // Update AI Insights banner
+            if (aiRes && aiRes.current) {
+                updateAIHero(aiRes.current);
+            } else if (latestRes && latestRes.ai_analysis) {
+                updateAIHero(latestRes.ai_analysis);
+            }
+
+            // Update history array if historical query returned records
+            if (histRes && Array.isArray(histRes) && histRes.length > 0) {
+                weatherRecords = histRes;
+                updateDashboardUI(weatherRecords);
+                redrawAllCharts();
+            }
+        } catch (err) {
+            console.warn('[DASHBOARD] Refresh sync warning:', err);
+        } finally {
+            if (refreshSpinner) setTimeout(() => refreshSpinner.classList.remove('animate-spin'), 350);
+        }
+    }
+
     async function fetchHistoricalData(hoursOrDays, isDays = true) {
         const refreshSpinner = document.getElementById('refreshSpinner');
         if (refreshSpinner) refreshSpinner.classList.add('animate-spin');
@@ -756,15 +805,15 @@
             });
         }
 
-        // Refresh button
+        // Refresh button (Instantly updates latest telemetry, AI, and charts)
         const refreshBtn = document.getElementById('refreshBtn');
-        if (refreshBtn && rangeSelect) {
+        if (refreshBtn) {
             refreshBtn.addEventListener('click', () => {
-                fetchHistoricalData(parseFloat(rangeSelect.value), true);
+                refreshAllDashboardData();
             });
         }
 
-        // AI Analyze button
+        // AI Analyze / Refresh button
         const aiBtn = document.getElementById('aiAnalyzeBtn');
         if (aiBtn) {
             aiBtn.addEventListener('click', async () => {
@@ -785,10 +834,11 @@
             });
         }
 
-        // Fetch initial AI summary
-        fetch('/api/ai-analysis').then(r => r.json()).then(res => {
-            if (res.current) updateAIHero(res.current);
-        }).catch(() => {});
+        // Initial sync of latest AI insights and telemetry
+        refreshAllDashboardData();
+
+        // Continuous 6-second background auto-refresh loop (guarantees freshness on mobile & desktop)
+        setInterval(refreshAllDashboardData, 6000);
     });
 </script>
 {% endblock %}

@@ -103,6 +103,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def add_no_cache_headers(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
 # Mount static and template directories
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
@@ -420,12 +429,15 @@ async def handle_weather_ingest(request: Request, db: Session = Depends(get_db))
         # Update in-memory microsecond state cache
         update_latest_cache(entry_dict)
 
+        # Immediate time-aware AI classification on every fresh telemetry frame
+        fresh_ai = perform_ai_analysis(entry_dict)
+
         # Real-time WebSocket & SSE broadcast
         broadcast_packet = {
             "type": "telemetry_update",
             "event": "new_reading",
             "data": entry_dict,
-            "ai_analysis": get_cached_ai_analysis(),
+            "ai_analysis": fresh_ai,
             "server_time": utc_now().isoformat() + "Z"
         }
         asyncio.create_task(manager.broadcast(broadcast_packet))
@@ -496,17 +508,20 @@ async def get_latest_weather(request: Request, device_id: Optional[str] = None, 
             }
         }
 
-    # Calculate live status
-    sec_ago = int(time.time() - _latest_telemetry_cache.get("last_updated_epoch", time.time()))
-    if sec_ago > 300:
-        try:
-            ts_str = cached_data.get("timestamp", "")
-            ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00")).astimezone(timezone.utc).replace(tzinfo=None)
+    # Calculate accurate live status from telemetry timestamp
+    sec_ago = 999999
+    try:
+        ts_str = cached_data.get("timestamp") or cached_data.get("recorded_at") or ""
+        if ts_str:
+            if "T" in ts_str:
+                ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00")).astimezone(timezone.utc).replace(tzinfo=None)
+            else:
+                ts = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
             sec_ago = max(0, int((utc_now() - ts).total_seconds()))
-        except Exception:
-            pass
+    except Exception:
+        sec_ago = int(time.time() - _latest_telemetry_cache.get("last_updated_epoch", time.time()))
 
-    is_online = sec_ago < 30
+    is_online = sec_ago < 45
 
     res = {
         "success": True,
@@ -683,14 +698,15 @@ async def get_ai_summary(request: Request, db: Session = Depends(get_db)):
     }
 
 
-@app.post("/api/ai-analysis/refresh")
-@app.get("/api/ai-analysis/refresh")
-@app.post("/api/ai/analyze-now")
-@app.get("/api/ai/analyze-now")
-async def refresh_ai_analysis(db: Session = Depends(get_db)):
+@app.api_route("/api/ai-analysis/refresh", methods=["GET", "POST", "HEAD"])
+@app.api_route("/api/ai/analyze-now", methods=["GET", "POST", "HEAD"])
+async def refresh_ai_analysis(request: Request, db: Session = Depends(get_db)):
     """
     Triggers an instant AI classification on latest physical sensor data.
     """
+    if request.method == "HEAD":
+        return Response(status_code=status.HTTP_200_OK, media_type="application/json")
+
     latest = db.query(WeatherData).order_by(WeatherData.timestamp.desc()).first()
     if not latest:
         return JSONResponse(
