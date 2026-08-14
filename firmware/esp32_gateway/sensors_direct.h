@@ -154,10 +154,13 @@ public:
     Serial.printf("[SENSORS] Direct sensor manager initialized. DHT11 Pin: GPIO %d, LDR Pin: GPIO %d (ADC)\n", dhtPin, ldrPin);
   }
 
+  // Dynamic Auto-Calibration bounds (adapts to actual physical ambient dark & bright levels)
+  float autoMinAdc = 120.0f;
+  float autoMaxAdc = 3200.0f;
+
   /**
-   * Reads raw ADC from LDR with 32-sample oversampling, deadband correction,
-   * and gamma perceptual linearization (gamma = 0.55) to accurately scale
-   * both indoor room lighting (300-500 lux) and outdoor sunlight (10,000+ lux).
+   * Reads raw ADC from LDR with 32-sample oversampling, dynamic auto-ranging
+   * calibration, and gamma linearization to guarantee a true full 0.0% to 100.0% span.
    */
   float readLightPercentage() {
     uint32_t adcSum = 0;
@@ -168,20 +171,31 @@ public:
     }
     float rawAdc = (float)adcSum / (float)OVERSAMPLE_COUNT;
 
-    // Deadband clamping to compensate for ESP32 ADC zero-zone & saturation
-    float clampedAdc = constrain(rawAdc, 40.0f, 4020.0f);
-    float normalized = (clampedAdc - 40.0f) / (4020.0f - 40.0f);
+    // Dynamic auto-ranging calibration: dynamically expands span to physical limits
+    if (rawAdc < autoMinAdc) {
+      autoMinAdc = max(rawAdc, 30.0f);
+    }
+    if (rawAdc > autoMaxAdc) {
+      autoMaxAdc = min(rawAdc, 4050.0f);
+    }
+
+    float span = autoMaxAdc - autoMinAdc;
+    if (span < 400.0f) span = 400.0f; // Safety clamp
+
+    // Map physical voltage accurately to 0.0 - 1.0
+    float normalized = (rawAdc - autoMinAdc) / span;
+    normalized = constrain(normalized, 0.0f, 1.0f);
 
     #if defined(LDR_INVERT_LOGIC) && (LDR_INVERT_LOGIC == 1)
     normalized = 1.0f - normalized;
     #endif
 
-    // Gamma perceptual curve (Linearizes CdS logarithmic resistance power law)
-    float pct = powf(normalized, 0.55f) * 100.0f;
+    // Gamma perceptual linearization (matches human visual perception)
+    float pct = powf(normalized, 0.60f) * 100.0f;
     pct = constrain(pct, 0.0f, 100.0f);
 
     // Exponential Moving Average (EMA) smoothing for stable live readings
-    const float EMA_ALPHA = 0.20f;
+    const float EMA_ALPHA = 0.25f;
     if (!hasInitialLdr) {
       smoothedLdrVal = pct;
       hasInitialLdr = true;
