@@ -8,6 +8,7 @@ struct SensorReading {
   float temperature_c;
   float humidity_pct;
   float light_pct;
+  float raw_adc;
   bool is_valid;
   const char* error_msg;
 };
@@ -19,14 +20,9 @@ private:
   unsigned long lastDhtReadMs;
   float lastValidTemp;
   float lastValidHum;
-  float smoothedLdrVal;
-  bool hasInitialLdr;
+  float lastRawAdc;
   uint32_t totalSamples;
   uint32_t dhtErrors;
-
-  // Dynamic Auto-Calibration bounds (adapts to actual physical ambient dark & bright levels)
-  float autoMinAdc;
-  float autoMaxAdc;
 
   // Precision microsecond bitbang reader for DHT11 on ESP32
   // Uses FreeRTOS portENTER_CRITICAL / portEXIT_CRITICAL to prevent timing jitter
@@ -145,30 +141,15 @@ private:
 public:
   DirectSensorManager(uint8_t dht_pin = DHT11_PIN, uint8_t ldr_pin = LDR_PIN)
     : dhtPin(dht_pin), ldrPin(ldr_pin), lastDhtReadMs(0),
-      lastValidTemp(24.0f), lastValidHum(45.0f), smoothedLdrVal(0.0f),
-      hasInitialLdr(false), totalSamples(0), dhtErrors(0),
-      autoMinAdc(120.0f), autoMaxAdc(3200.0f) {}
+      lastValidTemp(24.0f), lastValidHum(45.0f), lastRawAdc(0.0f),
+      totalSamples(0), dhtErrors(0) {}
 
   void begin() {
     pinMode(dhtPin, INPUT_PULLUP);
     pinMode(ldrPin, INPUT);
-    analogReadResolution(12); // 12-bit ADC (0 - 4095)
-    #if defined(ADC_11db)
-    analogSetAttenuation(ADC_11db); // Full 0-3.3V range
-    #endif
-  }
-
-  // Set/Get calibration from RTC memory for Deep Sleep persistence
-  void setCalibrationBounds(float minAdc, float maxAdc) {
-    if (minAdc > 0.0f && maxAdc > minAdc) {
-      autoMinAdc = minAdc;
-      autoMaxAdc = maxAdc;
-    }
-  }
-
-  void getCalibrationBounds(float& outMinAdc, float& outMaxAdc) const {
-    outMinAdc = autoMinAdc;
-    outMaxAdc = autoMaxAdc;
+    analogReadResolution(12); // 12-bit ADC (0 - 4095 counts)
+    analogSetPinAttenuation(ldrPin, ADC_11db); // Full 0 - 3.3V dynamic range
+    analogSetAttenuation(ADC_11db);
   }
 
   void setFallbackValues(float temp, float hum) {
@@ -181,69 +162,55 @@ public:
     outHum = lastValidHum;
   }
 
+  float getLastRawAdc() const {
+    return lastRawAdc;
+  }
+
   /**
-   * Reads raw ADC from LDR with 32-sample oversampling, dynamic auto-ranging
-   * calibration, and gamma linearization to guarantee a true full 0.0% to 100.0% span.
+   * Reads raw ADC from LDR with 32-sample oversampling and perceptual gamma mapping.
+   * Full physical 0 - 4095 ADC counts mapped to 0.0% - 100.0%.
    */
   float readLightPercentage() {
     uint32_t adcSum = 0;
     const int OVERSAMPLE_COUNT = 32;
     for (int i = 0; i < OVERSAMPLE_COUNT; i++) {
       adcSum += analogRead(ldrPin);
-      delayMicroseconds(40);
+      delayMicroseconds(50);
     }
     float rawAdc = (float)adcSum / (float)OVERSAMPLE_COUNT;
+    lastRawAdc = rawAdc;
 
-    // Dynamic auto-ranging calibration: dynamically expands span to physical limits
-    if (rawAdc < autoMinAdc) {
-      autoMinAdc = max(rawAdc, 30.0f);
-    }
-    if (rawAdc > autoMaxAdc) {
-      autoMaxAdc = min(rawAdc, 4050.0f);
-    }
-
-    float span = autoMaxAdc - autoMinAdc;
-    if (span < 400.0f) span = 400.0f; // Safety clamp
-
-    // Map physical voltage accurately to 0.0 - 1.0
-    float normalized = (rawAdc - autoMinAdc) / span;
+    // Standard 12-bit ADC range: 0 to 4095
+    // Small baseline deadband: < 30 counts = pitch black darkness
+    float normalized = rawAdc / 4095.0f;
     normalized = constrain(normalized, 0.0f, 1.0f);
 
     #if defined(LDR_INVERT_LOGIC) && (LDR_INVERT_LOGIC == 1)
     normalized = 1.0f - normalized;
     #endif
 
-    // Gamma perceptual linearization (matches human visual perception)
-    float pct = powf(normalized, 0.60f) * 100.0f;
+    // Gamma perceptual curve: gamma = 0.65 linearizes human eye illuminance perception
+    float pct = powf(normalized, 0.65f) * 100.0f;
     pct = constrain(pct, 0.0f, 100.0f);
 
-    // Exponential Moving Average (EMA) smoothing for stable readings
-    const float EMA_ALPHA = 0.40f;
-    if (!hasInitialLdr) {
-      smoothedLdrVal = pct;
-      hasInitialLdr = true;
-    } else {
-      smoothedLdrVal = (EMA_ALPHA * pct) + ((1.0f - EMA_ALPHA) * smoothedLdrVal);
-    }
-
-    return smoothedLdrVal;
+    return pct;
   }
 
   /**
    * Samples all physical sensors directly on the ESP32.
-   * Includes 1 retry for DHT11 if needed.
+   * Includes retry for DHT11 if needed.
    */
   SensorReading readSensors() {
     totalSamples++;
     SensorReading result;
     result.light_pct = readLightPercentage();
+    result.raw_adc = lastRawAdc;
 
     float temp = 0.0f;
     float hum = 0.0f;
     bool ok = readDHT11Raw(temp, hum);
 
     if (!ok) {
-      // Short 100ms pause and retry once
       delay(100);
       ok = readDHT11Raw(temp, hum);
     }

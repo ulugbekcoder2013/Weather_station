@@ -119,22 +119,22 @@ void setup() {
   // Quick visual indicator
   pulseStatusLed(15);
 
-  // 1. Initialize sensor hardware and restore RTC calibration bounds
+  // 1. Initialize sensor hardware and restore RTC fallback values
   sensorManager.begin();
-  sensorManager.setCalibrationBounds(rtcAutoMinAdc, rtcAutoMaxAdc);
   sensorManager.setFallbackValues(rtcLastValidTemp, rtcLastValidHum);
 
   // 2. Physical sensor acquisition (DHT11 bitbang + LDR 32x oversampling)
   SensorReading reading = sensorManager.readSensors();
 
-  // Persist updated calibration bounds to RTC RAM
-  sensorManager.getCalibrationBounds(rtcAutoMinAdc, rtcAutoMaxAdc);
+  // Persist updated sensor fallback to RTC RAM
   sensorManager.getFallbackValues(rtcLastValidTemp, rtcLastValidHum);
 
-  Serial.printf("[SENSOR ACQUISITION] Temp: %.1f°C | Hum: %.1f%% | Light: %.1f%% | Valid: %s\n",
+  Serial.printf("[SENSOR ACQUISITION] Temp: %.1f°C | Hum: %.1f%% | Light: %.1f%% (Raw ADC: %.0f/4095 on GPIO %d) | Valid: %s\n",
                 reading.temperature_c,
                 reading.humidity_pct,
                 reading.light_pct,
+                reading.raw_adc,
+                LDR_PIN,
                 reading.is_valid ? "YES" : "FALLBACK");
 
 #if DEEP_SLEEP_ENABLED == 1

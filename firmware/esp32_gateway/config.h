@@ -30,7 +30,7 @@
 
 // Photoresistor (LDR) Analog Light Sensor
 #define LDR_PIN                   34    // ESP32 GPIO 34 / ADC1_CH6 (Voltage divider with 10k resistor to GND)
-#define LDR_INVERT_LOGIC          0     // 0 = standard divider (bright = high voltage), 1 = inverted
+#define LDR_INVERT_LOGIC          1     // 1 = Inverted divider (LDR to GND, direct sun = 0V -> 100%), 0 = standard
 
 // 5. Sensor Calibration & Thermal Offset Compensation
 // Note: In Deep Sleep mode, the ESP32 is cold because it sleeps 98.4% of the time.
