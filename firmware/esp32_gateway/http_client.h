@@ -5,6 +5,7 @@
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include "ring_buffer.h"
+#include "config.h"
 
 class TelemetryHttpClient {
 private:
@@ -18,9 +19,9 @@ public:
 
   /**
    * Serializes and transmits a telemetry record to the REST /api/weather endpoint
-   * with retry mechanism and generous timeout for cloud cold starts.
+   * with optimized timeouts for ultra-fast awake cycles.
    */
-  bool sendTelemetry(const TelemetryRecord& record) {
+  bool sendTelemetry(const TelemetryRecord& record, unsigned long timeoutMs = HTTP_TIMEOUT_MS) {
     if (WiFi.status() != WL_CONNECTED) {
       Serial.println(F("[HTTP] Error: Wi-Fi not connected."));
       return false;
@@ -41,57 +42,45 @@ public:
     String payload;
     serializeJson(document, payload);
 
-    // Retry loop (up to 3 attempts with 2s backoff)
-    const int maxRetries = 2;
     bool isHttps = strncmp(ingestUrl, "https://", 8) == 0;
+    HTTPClient http;
+    WiFiClientSecure secureClient;
+    WiFiClient plainClient;
 
-    for (int attempt = 1; attempt <= maxRetries; attempt++) {
-      HTTPClient http;
-      WiFiClientSecure secureClient;
-      WiFiClient plainClient;
-
-      if (isHttps) {
-        secureClient.setInsecure(); // Resilient TLS connection for cloud hosting & Render
-        secureClient.setTimeout(15000); // 15s timeout
-        http.begin(secureClient, ingestUrl);
-      } else {
-        plainClient.setTimeout(15000);
-        http.begin(plainClient, ingestUrl);
-      }
-
-      http.setReuse(false);
-      http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-      http.addHeader("Content-Type", "application/json");
-      http.addHeader("X-API-Key", apiKey);
-      http.addHeader("User-Agent", "ESP32-Station/2.0");
-      http.setTimeout(15000); // 15s HTTP timeout
-
-      Serial.printf("[HTTP POST] (Attempt %d/%d) Transmitting to: %s\n", attempt, maxRetries, ingestUrl);
-      int httpCode = http.POST(payload);
-
-      if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_CREATED) {
-        String responseBody = http.getString();
-        Serial.printf("[HTTP SUCCESS] Status %d: %s\n", httpCode, responseBody.c_str());
-        http.end();
-        return true;
-      } else if (httpCode >= 400 && httpCode < 500) {
-        Serial.printf("[HTTP] Request rejected with status %d; will not retry this frame.\n", httpCode);
-        http.end();
-        return false;
-      } else if (httpCode > 0) {
-        Serial.printf("[HTTP RETRY] Server returned status %d\n", httpCode);
-      } else {
-        Serial.printf("[HTTP RETRY] POST failed: %s\n", http.errorToString(httpCode).c_str());
-      }
-
-      http.end();
-
-      if (attempt < maxRetries) {
-        delay(500); // 500ms backoff before next attempt
-      }
+    if (isHttps) {
+      secureClient.setInsecure(); // Resilient TLS connection for Render cloud
+      secureClient.setTimeout(timeoutMs / 1000);
+      http.begin(secureClient, ingestUrl);
+    } else {
+      plainClient.setTimeout(timeoutMs / 1000);
+      http.begin(plainClient, ingestUrl);
     }
 
-    return false;
+    http.setReuse(false);
+    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+    http.addHeader("Content-Type", "application/json");
+    http.addHeader("X-API-Key", apiKey);
+    http.addHeader("User-Agent", "ESP32-WeatherStation/3.0 (DeepSleep)");
+    http.setTimeout(timeoutMs);
+
+    unsigned long startMs = millis();
+    Serial.printf("[HTTP POST] Transmitting telemetry to %s...\n", ingestUrl);
+    int httpCode = http.POST(payload);
+    unsigned long durationMs = millis() - startMs;
+
+    bool success = false;
+    if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_CREATED) {
+      String responseBody = http.getString();
+      Serial.printf("[HTTP SUCCESS] Status %d in %lu ms: %s\n", httpCode, durationMs, responseBody.c_str());
+      success = true;
+    } else if (httpCode > 0) {
+      Serial.printf("[HTTP ERROR] Server responded with code %d in %lu ms\n", httpCode, durationMs);
+    } else {
+      Serial.printf("[HTTP FAILED] Error: %s (%lu ms)\n", http.errorToString(httpCode).c_str(), durationMs);
+    }
+
+    http.end();
+    return success;
   }
 };
 

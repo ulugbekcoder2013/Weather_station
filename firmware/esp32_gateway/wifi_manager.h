@@ -2,86 +2,95 @@
 #define WIFI_MANAGER_H
 
 #include <WiFi.h>
+#include <esp_wifi.h>
 #include <time.h>
+#include "config.h"
 
 class StationWiFiManager {
 private:
-  static const unsigned long INITIAL_BACKOFF = 5000;   // 5s for Wi-Fi association
-  static const unsigned long MAX_BACKOFF     = 30000;  // 30s max backoff
-  static const unsigned long NTP_RETRY_INTERVAL = 45000; // 45s between NTP attempts
-
   const char* ssid;
   const char* password;
-  unsigned long lastReconnectAttempt;
-  unsigned long lastNtpAttempt;
-  unsigned long currentBackoffDelay;
   bool ntpSynchronized;
 
 public:
   StationWiFiManager(const char* wifiSsid, const char* wifiPassword)
-    : ssid(wifiSsid), password(wifiPassword), lastReconnectAttempt(0),
-      lastNtpAttempt(0), currentBackoffDelay(INITIAL_BACKOFF), ntpSynchronized(false) {}
+    : ssid(wifiSsid), password(wifiPassword), ntpSynchronized(false) {}
 
-  void begin() {
+  /**
+   * High-speed Wi-Fi association using cached BSSID and channel from RTC memory.
+   * Skips full 2.4GHz channel scan, connecting in < 300-600ms.
+   */
+  bool connectWithRtcCache(uint8_t channel, const uint8_t* bssid, bool cacheValid, unsigned long timeoutMs = WIFI_CONNECT_TIMEOUT_MS) {
     WiFi.mode(WIFI_STA);
-    WiFi.setAutoReconnect(true);
-    connect();
-  }
+    WiFi.setAutoReconnect(false); // In deep sleep mode we manage connection lifecycle directly
 
-  void connect() {
-    Serial.print(F("[WIFI] Connecting to SSID: "));
-    Serial.println(ssid);
-    WiFi.begin(ssid, password);
-    lastReconnectAttempt = millis();
+    if (cacheValid && channel > 0 && channel <= 14 && bssid != nullptr) {
+      Serial.printf("[WIFI] Fast connect via RTC Cache -> Ch: %d, BSSID: %02X:%02X:%02X:%02X:%02X:%02X\n",
+                    channel, bssid[0], bssid[1], bssid[2], bssid[3], bssid[4], bssid[5]);
+      WiFi.begin(ssid, password, channel, bssid, true);
+    } else {
+      Serial.printf("[WIFI] Standard connect to SSID: %s (Scanning channels...)\n", ssid);
+      WiFi.begin(ssid, password);
+    }
+
+    unsigned long startMs = millis();
+    while (WiFi.status() != WL_CONNECTED && (millis() - startMs < timeoutMs)) {
+      delay(25);
+    }
+
+    // If fast connect with cache timed out, try one standard scan fallback
+    if (WiFi.status() != WL_CONNECTED && cacheValid) {
+      Serial.println(F("[WIFI] Fast connect timed out. Falling back to full scan..."));
+      WiFi.disconnect();
+      delay(50);
+      WiFi.begin(ssid, password);
+      startMs = millis();
+      while (WiFi.status() != WL_CONNECTED && (millis() - startMs < timeoutMs)) {
+        delay(30);
+      }
+    }
+
+    bool connected = (WiFi.status() == WL_CONNECTED);
+    if (connected) {
+      Serial.printf("[WIFI SUCCESS] Associated in %lu ms! IP: %s, Ch: %d, RSSI: %d dBm\n",
+                    millis() - startMs,
+                    WiFi.localIP().toString().c_str(),
+                    WiFi.channel(),
+                    WiFi.RSSI());
+    } else {
+      Serial.printf("[WIFI FAILED] Could not connect to %s within %lu ms (Status: %d)\n",
+                    ssid, timeoutMs, WiFi.status());
+    }
+
+    return connected;
   }
 
   bool isConnected() {
     return WiFi.status() == WL_CONNECTED;
   }
 
-  void update() {
-    unsigned long now = millis();
-    if (isConnected()) {
-      currentBackoffDelay = INITIAL_BACKOFF; // Reset backoff on connection
-      if (!ntpSynchronized && (now - lastNtpAttempt >= NTP_RETRY_INTERVAL || lastNtpAttempt == 0)) {
-        lastNtpAttempt = now;
-        syncNTPTime();
-      }
-    } else {
-      ntpSynchronized = false;
-      if (now - lastReconnectAttempt >= currentBackoffDelay) {
-        lastReconnectAttempt = now;
-        Serial.print(F("[WIFI] Reconnecting to "));
-        Serial.print(ssid);
-        Serial.println(F("..."));
-        
-        WiFi.disconnect();
-        delay(50);
-        connect();
-
-        currentBackoffDelay = min(currentBackoffDelay * 2, MAX_BACKOFF);
-      }
-    }
+  uint8_t getChannel() {
+    return isConnected() ? WiFi.channel() : 0;
   }
 
+  const uint8_t* getBSSID() {
+    return isConnected() ? WiFi.BSSID() : nullptr;
+  }
+
+  int getRssi() {
+    return isConnected() ? WiFi.RSSI() : 0;
+  }
+
+  /**
+   * Background NTP sync (best-effort, non-blocking if already synced).
+   */
   void syncNTPTime() {
     time_t now = time(nullptr);
     if (now > 8 * 3600 * 2) {
       ntpSynchronized = true;
-      struct tm timeinfo;
-      gmtime_r(&now, &timeinfo);
-      char timeBuf[32];
-      strftime(timeBuf, sizeof(timeBuf), "%Y-%m-%d %H:%M:%S UTC", &timeinfo);
-      Serial.printf("[NTP] Time verified: %s\n", timeBuf);
       return;
     }
-
-    Serial.println(F("[NTP] Initializing background network time sync (pool.ntp.org)..."));
     configTime(0, 0, "pool.ntp.org", "time.google.com");
-  }
-
-  bool isNtpReady() const {
-    return ntpSynchronized;
   }
 
   void getIsoTimestamp(char* outBuf, size_t maxLen) {
@@ -91,16 +100,19 @@ public:
       gmtime_r(&now, &timeinfo);
       strftime(outBuf, maxLen, "%Y-%m-%d %H:%M:%S", &timeinfo);
     } else {
-      // Fallback relative timestamp if NTP is not yet synced
       snprintf(outBuf, maxLen, "1970-01-01 00:00:00");
     }
   }
 
-  int getRssi() {
-    if (isConnected()) {
-      return WiFi.RSSI();
-    }
-    return 0;
+  /**
+   * Complete RF & Wi-Fi hardware shutdown before entering Deep Sleep.
+   * Ensures the radio consumes 0 mA during sleep.
+   */
+  void disconnectAndSleep() {
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
+    esp_wifi_stop();
+    Serial.println(F("[WIFI] Radio & Wi-Fi peripheral powered down."));
   }
 };
 

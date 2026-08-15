@@ -24,6 +24,10 @@ private:
   uint32_t totalSamples;
   uint32_t dhtErrors;
 
+  // Dynamic Auto-Calibration bounds (adapts to actual physical ambient dark & bright levels)
+  float autoMinAdc;
+  float autoMaxAdc;
+
   // Precision microsecond bitbang reader for DHT11 on ESP32
   // Uses FreeRTOS portENTER_CRITICAL / portEXIT_CRITICAL to prevent timing jitter
   bool readDHT11Raw(float& outTemp, float& outHum) {
@@ -44,7 +48,7 @@ private:
     portENTER_CRITICAL(&mux);
 
     // Wait for DHT response (LOW for 80us, then HIGH for 80us)
-    unsigned long timeoutMicros = micros() + 200;
+    unsigned long timeoutMicros = micros() + 250;
     while (digitalRead(dhtPin) == HIGH) {
       if (micros() > timeoutMicros) {
         portEXIT_CRITICAL(&mux);
@@ -52,7 +56,7 @@ private:
       }
     }
 
-    timeoutMicros = micros() + 200;
+    timeoutMicros = micros() + 250;
     while (digitalRead(dhtPin) == LOW) {
       if (micros() > timeoutMicros) {
         portEXIT_CRITICAL(&mux);
@@ -60,7 +64,7 @@ private:
       }
     }
 
-    timeoutMicros = micros() + 200;
+    timeoutMicros = micros() + 250;
     while (digitalRead(dhtPin) == HIGH) {
       if (micros() > timeoutMicros) {
         portEXIT_CRITICAL(&mux);
@@ -107,13 +111,13 @@ private:
 
     // DHT11 format:
     // data[0]: Humidity integer
-    // data[1]: Humidity decimal (usually 0 for DHT11)
+    // data[1]: Humidity decimal
     // data[2]: Temperature integer
-    // data[3]: Temperature decimal (usually 0 for DHT11)
+    // data[3]: Temperature decimal
     float rawHum = (float)data[0] + ((float)data[1] * 0.1f);
     float rawTemp = (float)data[2] + ((float)data[3] * 0.1f);
 
-    // Apply thermal calibration offset (compensating for ESP32 proximity heat)
+    // Apply thermal calibration offset
     #if defined(TEMPERATURE_OFFSET_C)
     float calTemp = rawTemp + (float)(TEMPERATURE_OFFSET_C);
     #else
@@ -142,7 +146,8 @@ public:
   DirectSensorManager(uint8_t dht_pin = DHT11_PIN, uint8_t ldr_pin = LDR_PIN)
     : dhtPin(dht_pin), ldrPin(ldr_pin), lastDhtReadMs(0),
       lastValidTemp(24.0f), lastValidHum(45.0f), smoothedLdrVal(0.0f),
-      hasInitialLdr(false), totalSamples(0), dhtErrors(0) {}
+      hasInitialLdr(false), totalSamples(0), dhtErrors(0),
+      autoMinAdc(120.0f), autoMaxAdc(3200.0f) {}
 
   void begin() {
     pinMode(dhtPin, INPUT_PULLUP);
@@ -151,12 +156,30 @@ public:
     #if defined(ADC_11db)
     analogSetAttenuation(ADC_11db); // Full 0-3.3V range
     #endif
-    Serial.printf("[SENSORS] Direct sensor manager initialized. DHT11 Pin: GPIO %d, LDR Pin: GPIO %d (ADC)\n", dhtPin, ldrPin);
   }
 
-  // Dynamic Auto-Calibration bounds (adapts to actual physical ambient dark & bright levels)
-  float autoMinAdc = 120.0f;
-  float autoMaxAdc = 3200.0f;
+  // Set/Get calibration from RTC memory for Deep Sleep persistence
+  void setCalibrationBounds(float minAdc, float maxAdc) {
+    if (minAdc > 0.0f && maxAdc > minAdc) {
+      autoMinAdc = minAdc;
+      autoMaxAdc = maxAdc;
+    }
+  }
+
+  void getCalibrationBounds(float& outMinAdc, float& outMaxAdc) const {
+    outMinAdc = autoMinAdc;
+    outMaxAdc = autoMaxAdc;
+  }
+
+  void setFallbackValues(float temp, float hum) {
+    if (temp > -40.0f && temp < 85.0f) lastValidTemp = temp;
+    if (hum >= 0.0f && hum <= 100.0f) lastValidHum = hum;
+  }
+
+  void getFallbackValues(float& outTemp, float& outHum) const {
+    outTemp = lastValidTemp;
+    outHum = lastValidHum;
+  }
 
   /**
    * Reads raw ADC from LDR with 32-sample oversampling, dynamic auto-ranging
@@ -194,8 +217,8 @@ public:
     float pct = powf(normalized, 0.60f) * 100.0f;
     pct = constrain(pct, 0.0f, 100.0f);
 
-    // Exponential Moving Average (EMA) smoothing for stable live readings
-    const float EMA_ALPHA = 0.25f;
+    // Exponential Moving Average (EMA) smoothing for stable readings
+    const float EMA_ALPHA = 0.40f;
     if (!hasInitialLdr) {
       smoothedLdrVal = pct;
       hasInitialLdr = true;
@@ -208,39 +231,36 @@ public:
 
   /**
    * Samples all physical sensors directly on the ESP32.
+   * Includes 1 retry for DHT11 if needed.
    */
   SensorReading readSensors() {
     totalSamples++;
     SensorReading result;
     result.light_pct = readLightPercentage();
 
-    unsigned long now = millis();
-    // DHT11 requires >= 1000ms between physical sampling cycles
-    if (now - lastDhtReadMs >= 1000 || lastDhtReadMs == 0) {
-      float temp = 0.0f;
-      float hum = 0.0f;
-      bool ok = readDHT11Raw(temp, hum);
-      if (ok) {
-        lastValidTemp = temp;
-        lastValidHum = hum;
-        lastDhtReadMs = now;
-        result.temperature_c = temp;
-        result.humidity_pct = hum;
-        result.is_valid = true;
-        result.error_msg = nullptr;
-      } else {
-        dhtErrors++;
-        // Use last valid reading with fallback if available
-        result.temperature_c = lastValidTemp;
-        result.humidity_pct = lastValidHum;
-        result.is_valid = (lastValidTemp > -40.0f);
-        result.error_msg = "DHT11 raw read failed - retained previous valid reading";
-      }
-    } else {
-      result.temperature_c = lastValidTemp;
-      result.humidity_pct = lastValidHum;
+    float temp = 0.0f;
+    float hum = 0.0f;
+    bool ok = readDHT11Raw(temp, hum);
+
+    if (!ok) {
+      // Short 100ms pause and retry once
+      delay(100);
+      ok = readDHT11Raw(temp, hum);
+    }
+
+    if (ok) {
+      lastValidTemp = temp;
+      lastValidHum = hum;
+      result.temperature_c = temp;
+      result.humidity_pct = hum;
       result.is_valid = true;
       result.error_msg = nullptr;
+    } else {
+      dhtErrors++;
+      result.temperature_c = lastValidTemp;
+      result.humidity_pct = lastValidHum;
+      result.is_valid = (lastValidTemp > -40.0f);
+      result.error_msg = "DHT11 read failed; retained previous valid reading";
     }
 
     return result;
