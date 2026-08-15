@@ -6,6 +6,7 @@ import com.weatherstation.app.data.preferences.UserPreferencesManager
 import com.weatherstation.app.data.remote.AuthInterceptor
 import com.weatherstation.app.data.remote.WeatherApiService
 import com.weatherstation.app.data.remote.WeatherWebSocketManager
+import com.weatherstation.app.domain.model.AIAnalysis
 import com.weatherstation.app.domain.model.DeviceHealth
 import com.weatherstation.app.domain.model.WeatherReading
 import com.weatherstation.app.domain.model.WeatherStats
@@ -14,6 +15,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -31,6 +35,9 @@ class WeatherRepositoryImpl(
     private val repositoryScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var currentBaseUrl: String = ""
     private var apiService: WeatherApiService = createApiService(preferencesManager.serverUrl.value)
+
+    // AI analysis state — updated every time /api/latest returns ai_analysis
+    private val _aiAnalysis = MutableStateFlow<AIAnalysis?>(null)
 
     // Dual-Mode Real-Time WebSocket Streaming Engine
     private val webSocketManager = WeatherWebSocketManager(
@@ -105,6 +112,10 @@ class WeatherRepositoryImpl(
         return webSocketManager.isConnected
     }
 
+    override fun getAIAnalysisStream(): Flow<AIAnalysis?> {
+        return _aiAnalysis.asStateFlow()
+    }
+
     override suspend fun refreshLatest(): Result<WeatherReading> = withContext(Dispatchers.IO) {
         try {
             val devId = preferencesManager.deviceId.value.takeIf { it.isNotBlank() }
@@ -114,12 +125,16 @@ class WeatherRepositoryImpl(
             try {
                 val response = getApiService().getLatestReading(deviceId = devId)
                 if (response.isSuccessful && response.body()?.data != null) {
-                    val dto = response.body()!!.data!!
-                    currentReading = dto.toDomain()
+                    val dto = response.body()!!
+                    currentReading = dto.data!!.toDomain()
+                    // Parse AI analysis from server response
+                    dto.aiAnalysis?.let { _aiAnalysis.value = it.toDomain() }
                 } else if (response.isSuccessful && response.body()?.data == null && devId != null) {
                     val fallbackResp = getApiService().getLatestReading(deviceId = null)
                     if (fallbackResp.isSuccessful && fallbackResp.body()?.data != null) {
-                        currentReading = fallbackResp.body()!!.data!!.toDomain()
+                        val dto = fallbackResp.body()!!
+                        currentReading = dto.data!!.toDomain()
+                        dto.aiAnalysis?.let { _aiAnalysis.value = it.toDomain() }
                     }
                 }
             } catch (e: Exception) {

@@ -17,6 +17,25 @@ data class AIWeatherModel(
     val analyzedAt: String? = null
 )
 
+/**
+ * Clean domain model for server AI analysis with full time-awareness.
+ * All values originate from the server's real-time AI inference pipeline.
+ */
+data class AIAnalysis(
+    val weatherType: String,
+    val verticalLabel: String,
+    val headline: String,
+    val summary: String,
+    val clothingAdvice: String,
+    val comfortIndex: Int,
+    val analyzedAt: String? = null,
+    val modelUsed: String,
+    val status: String,
+    val timeStr: String? = null,
+    val timeContext: String? = null,
+    val localTime: String? = null
+)
+
 data class WeatherReading(
     val id: Long,
     val deviceId: String,

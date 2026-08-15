@@ -3,6 +3,7 @@ package com.weatherstation.app.ui.screens.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.weatherstation.app.data.preferences.UserPreferencesManager
+import com.weatherstation.app.domain.model.AIAnalysis
 import com.weatherstation.app.domain.model.TemperatureUnit
 import com.weatherstation.app.domain.model.WeatherReading
 import com.weatherstation.app.domain.repository.WeatherRepository
@@ -18,6 +19,7 @@ data class HomeUiState(
     val isLoading: Boolean = true,
     val reading: WeatherReading? = null,
     val history: List<WeatherReading> = emptyList(),
+    val aiAnalysis: AIAnalysis? = null,
     val isOnline: Boolean = true,
     val isWebSocketLive: Boolean = false,
     val isRefreshing: Boolean = false,
@@ -69,7 +71,14 @@ class HomeViewModel(
             }
         }
 
-        // 4. Trigger initial network sync
+        // 4. Stream AI analysis from server
+        viewModelScope.launch {
+            repository.getAIAnalysisStream().collect { ai ->
+                _uiState.value = _uiState.value.copy(aiAnalysis = ai)
+            }
+        }
+
+        // 5. Trigger initial network sync
         refresh(manual = false)
         startAutoRefreshLoop()
     }

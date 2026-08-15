@@ -54,7 +54,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.weatherstation.app.R
+import com.weatherstation.app.domain.model.AIAnalysis
 import com.weatherstation.app.ui.components.HourlyCapsuleRail
+import com.weatherstation.app.ui.components.SensorDetailCard
+import com.weatherstation.app.ui.components.TodaySummaryCard
 import com.weatherstation.app.ui.components.WeatherHeroCard
 import com.weatherstation.app.ui.theme.AuraGlassCapsuleBg
 import com.weatherstation.app.ui.theme.AuraGlassCapsuleBorder
@@ -272,7 +275,22 @@ fun HomeScreen(
                         unit = unit
                     )
 
-                    Spacer(modifier = Modifier.height(20.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    TodaySummaryCard(
+                        readings = uiState.history,
+                        currentReading = reading,
+                        unit = unit
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    SensorDetailCard(reading = reading, unit = unit)
+
+                    if (uiState.aiAnalysis != null) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        AIInsightCard(ai = uiState.aiAnalysis!!)
+                    }
 
                     Spacer(modifier = Modifier.height(60.dp))
                 }
@@ -536,7 +554,33 @@ fun HomeScreen(
                             unit = unit
                         )
 
-                        Spacer(modifier = Modifier.height(20.dp))
+                        Spacer(modifier = Modifier.height(18.dp))
+
+                        // Daily Statistics Summary (real sensor aggregates)
+                        TodaySummaryCard(
+                            readings = uiState.history,
+                            currentReading = reading,
+                            unit = unit,
+                            modifier = Modifier.padding(horizontal = 20.dp)
+                        )
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // Real-Time Sensor Detail Card
+                        SensorDetailCard(
+                            reading = reading,
+                            unit = unit,
+                            modifier = Modifier.padding(horizontal = 20.dp)
+                        )
+
+                        // AI Analysis Insight Card (only if server returned analysis)
+                        if (uiState.aiAnalysis != null) {
+                            Spacer(modifier = Modifier.height(14.dp))
+                            AIInsightCard(
+                                ai = uiState.aiAnalysis!!,
+                                modifier = Modifier.padding(horizontal = 20.dp)
+                            )
+                        }
 
                         Spacer(modifier = Modifier.height(90.dp))
                     }
@@ -547,26 +591,35 @@ fun HomeScreen(
 }
 
 @Composable
-fun AIInsightBanner(
-    ai: com.weatherstation.app.domain.model.AIWeatherModel,
+fun AIInsightCard(
+    ai: AIAnalysis,
     modifier: Modifier = Modifier
 ) {
+    val comfortColor = when {
+        ai.comfortIndex >= 80 -> Color(0xFF15803D)
+        ai.comfortIndex >= 50 -> Color(0xFFCA8A04)
+        else -> Color(0xFFDC2626)
+    }
+    val comfortBg = when {
+        ai.comfortIndex >= 80 -> Color(0xFFDCFCE7)
+        ai.comfortIndex >= 50 -> Color(0xFFFEF9C3)
+        else -> Color(0xFFFEE2E2)
+    }
+
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(24.dp))
+            .clip(RoundedCornerShape(22.dp))
             .background(
                 Brush.linearGradient(
-                    colors = listOf(
-                        Color(0xFFF8FAFC),
-                        Color(0xFFEFF6FF)
-                    )
+                    colors = listOf(Color(0xFFF8FAFC), Color(0xFFEFF6FF))
                 )
             )
-            .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(24.dp))
-            .padding(18.dp)
+            .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(22.dp))
+            .padding(16.dp)
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            // Header row
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -576,10 +629,15 @@ fun AIInsightBanner(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Text(text = "✨", fontSize = 15.sp)
+                    Icon(
+                        imageVector = Icons.Filled.AutoAwesome,
+                        contentDescription = null,
+                        tint = Color(0xFF4F46E5),
+                        modifier = Modifier.size(16.dp)
+                    )
                     Text(
-                        text = ai.headline,
-                        fontSize = 15.sp,
+                        text = "AI Tahlili",
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF1E293B)
                     )
@@ -587,19 +645,28 @@ fun AIInsightBanner(
 
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0xFFDCFCE7))
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(comfortBg)
                         .padding(horizontal = 8.dp, vertical = 3.dp)
                 ) {
                     Text(
                         text = "Qulaylik: ${ai.comfortIndex}/100",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF15803D)
+                        color = comfortColor
                     )
                 }
             }
 
+            // Headline
+            Text(
+                text = ai.headline,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF1E293B)
+            )
+
+            // Summary
             Text(
                 text = ai.summary,
                 fontSize = 13.sp,
@@ -608,16 +675,47 @@ fun AIInsightBanner(
                 lineHeight = 19.sp
             )
 
+            // Clothing advice
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Text(text = "💡", fontSize = 12.sp)
+                Text(text = "👔", fontSize = 12.sp)
                 Text(
-                    text = "Kiyim tavsiyasi: ${ai.clothingAdvice}",
+                    text = ai.clothingAdvice,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = Color(0xFF2563EB)
+                )
+            }
+
+            // Time context and model info
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (ai.timeContext != null) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFFEEF2FF))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "🕐 ${ai.timeStr ?: ""} · ${ai.timeContext}",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF4F46E5)
+                        )
+                    }
+                }
+
+                Text(
+                    text = ai.modelUsed,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color(0xFF94A3B8)
                 )
             }
         }
