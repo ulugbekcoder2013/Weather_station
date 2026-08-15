@@ -16,7 +16,6 @@ Strictly adhere to the following architectural pillars, protocols, and engineeri
 - Target Microcontroller: ESP32 (e.g. NodeMCU ESP-WROOM-32).
 - Sensors:
   * DHT11 on GPIO 4: Temperature (-40°C to 85°C) & Relative Humidity (0% to 100%).
-  * LDR Photoresistor on GPIO 34 (ADC1): Sunlight / Solar Irradiance (0.0% to 100.0%).
   * Rain Sensor on GPIO 35 / Digital Pin: Precipitation state (True / False).
   * Battery Divider on GPIO 36 (ADC1): Voltage monitoring (0.0V to 4.2V).
 

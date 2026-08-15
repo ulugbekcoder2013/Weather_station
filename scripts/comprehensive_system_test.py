@@ -155,14 +155,13 @@ def test_ai_service():
     sample_reading = {
         "temperature": 24.5,
         "humidity": 55.0,
-        "sun_activity": 75.0,
         "pressure": 1013.25,
         "wind_speed": 4.2,
         "rain_detected": False,
-        "recorded_at": "2026-08-14 14:00:00"
+        "recorded_at": "2026-08-14 09:00:00" # UTC 09:00:00 -> Local 14:00:00 (Midday / Afternoon)
     }
     prompt = ai_service._build_ai_prompt(sample_reading)
-    if "24.5°C" in prompt and "75.0%" in prompt and "Midday / Afternoon" in prompt:
+    if "24.5°C" in prompt and "Midday / Afternoon" in prompt:
         report_pass("Prompt includes correct sensor metrics, time context, and schema.")
         passed += 1
     else:
@@ -172,12 +171,12 @@ def test_ai_service():
     # Test 2.2: Heuristic classifier rule validation
     print_test("AI Heuristic Classifier Decision Matrix")
     test_conditions = [
-        ({"rain_detected": True, "temperature": 25.0, "humidity": 90.0, "sun_activity": 10.0}, "thunderstorm"),
-        ({"rain_detected": True, "temperature": 15.0, "humidity": 70.0, "sun_activity": 10.0}, "rain"),
-        ({"rain_detected": False, "temperature": -2.0, "humidity": 80.0, "sun_activity": 20.0}, "snow"),
-        ({"rain_detected": False, "temperature": 12.0, "humidity": 95.0, "sun_activity": 15.0}, "foggy"),
-        ({"rain_detected": False, "temperature": 20.0, "humidity": 45.0, "sun_activity": 5.0}, "nighttime"),
-        ({"rain_detected": False, "temperature": 24.0, "humidity": 50.0, "sun_activity": 80.0}, "sunny"),
+        ({"rain_detected": True, "temperature": 25.0, "humidity": 90.0, "recorded_at": "2026-08-14 09:00:00"}, "thunderstorm"),
+        ({"rain_detected": True, "temperature": 15.0, "humidity": 70.0, "recorded_at": "2026-08-14 09:00:00"}, "rain"),
+        ({"rain_detected": False, "temperature": -2.0, "humidity": 80.0, "recorded_at": "2026-08-14 09:00:00"}, "snow"),
+        ({"rain_detected": False, "temperature": 12.0, "humidity": 95.0, "recorded_at": "2026-08-14 09:00:00"}, "foggy"),
+        ({"rain_detected": False, "temperature": 20.0, "humidity": 45.0, "recorded_at": "2026-08-14 20:00:00"}, "nighttime"), # UTC 20:00 -> Local 01:00 (Midnight)
+        ({"rain_detected": False, "temperature": 24.0, "humidity": 50.0, "recorded_at": "2026-08-14 07:00:00"}, "sunny"), # UTC 07:00 -> Local 12:00 (Midday)
     ]
 
     for r_in, expected_type in test_conditions:
@@ -339,7 +338,7 @@ def test_web_server_and_apis():
         }
         status, res = http_req("/api/ingest.php", method="POST", data=payload_2, headers={"Authorization": f"Bearer {TEST_API_KEY}"})
         if status == 201 and res.get("success") is True:
-            report_pass(f"Legacy route ingested ID {res.get('id')}: Temp={res['data']['temperature']}°C, Light={res['data']['sun_activity']}%")
+            report_pass(f"Legacy route ingested ID {res.get('id')}: Temp={res['data']['temperature']}°C, Hum={res['data']['humidity']}%")
             passed += 1
         else:
             report_fail(f"Legacy ingestion failed: {status}, {res}")

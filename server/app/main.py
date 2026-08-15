@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Smart Home Weather Station — High-Performance Real-Time FastAPI Backend
-Sensor Acquisition Pipeline: ESP32 (DHT11 + LDR Photoresistor) -> Real-Time FastAPI -> Web Dashboard / Android App
+Sensor Acquisition Pipeline: ESP32 (DHT11 Digital) -> Real-Time FastAPI -> Web Dashboard / Android App
 Zero fake data policy: All metrics strictly ingested from physical sensor acquisition.
 """
 
@@ -89,7 +89,7 @@ async def lifespan(app: FastAPI):
 # Create FastAPI app
 app = FastAPI(
     title="Smart Home Weather Station Real-Time Engine",
-    description="Hyper-fast real-time telemetry server for ESP32 (DHT11 + Photoresistor), Web Dashboard, and Android App.",
+    description="Hyper-fast real-time telemetry server for ESP32 (DHT11 Digital), Web Dashboard, and Android App.",
     version="2.0.0",
     lifespan=lifespan
 )
@@ -396,11 +396,9 @@ async def handle_weather_ingest(request: Request, db: Session = Depends(get_db))
         hum_raw = payload_data.get("humidity", payload_data.get("humidity_pct", payload_data.get("hum")))
         hum = parse_numeric(hum_raw, 0.0, 100.0, "humidity")
 
-        # LDR Photoresistor Sunlight / Illumination (0 to 100%)
-        sun_raw = payload_data.get("sun_activity", payload_data.get("light_pct", payload_data.get("light", 0.0)))
-        sun = parse_numeric(sun_raw, 0.0, 100.0, "sun_activity")
-
         # Optional metrics
+        sun_raw = payload_data.get("sun_activity", payload_data.get("light_pct", payload_data.get("light")))
+        sun = parse_optional_numeric(sun_raw, 0.0, 100.0) if sun_raw is not None else None
         wind = parse_optional_numeric(payload_data.get("wind_speed", payload_data.get("wind")), 0.0, 250.0)
         press = parse_optional_numeric(payload_data.get("pressure", payload_data.get("pressure_hpa")), 300.0, 1100.0)
         batt = parse_optional_numeric(payload_data.get("batt_voltage", payload_data.get("battery")), 0.0, 20.0)

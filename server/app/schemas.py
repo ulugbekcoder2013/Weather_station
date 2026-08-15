@@ -11,8 +11,8 @@ class TelemetryPayload(BaseModel):
     device_id: Optional[str] = Field(default="WS-001", max_length=64)
     temperature: float = Field(..., description="Temperature in Celsius (DHT11)")
     humidity: float = Field(..., description="Relative Humidity in % (DHT11)")
-    sun_activity: Optional[float] = Field(default=None, description="Sunlight intensity % (Photoresistor LDR)")
-    light_pct: Optional[float] = Field(default=None, description="Alias for sun_activity")
+    sun_activity: Optional[float] = Field(default=None, description="Optional legacy parameter")
+    light_pct: Optional[float] = Field(default=None, description="Optional legacy parameter")
     wind_speed: Optional[float] = Field(default=None, description="Wind speed in m/s")
     pressure: Optional[float] = Field(default=None, description="Barometric pressure in hPa")
     batt_voltage: Optional[float] = Field(default=None, description="Battery voltage in V")
@@ -33,12 +33,6 @@ class TelemetryPayload(BaseModel):
         if not math.isfinite(v) or v < 0.0 or v > 100.0:
             raise ValueError("Humidity must be between 0.0% and 100.0%")
         return round(v, 1)
-
-    def get_light(self) -> float:
-        val = self.sun_activity if self.sun_activity is not None else (self.light_pct if self.light_pct is not None else 0.0)
-        if not math.isfinite(val):
-            return 0.0
-        return max(0.0, min(round(float(val), 1), 100.0))
 
 class TelemetryResponse(BaseModel):
     success: bool = True

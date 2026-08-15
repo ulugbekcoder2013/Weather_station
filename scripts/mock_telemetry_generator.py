@@ -32,15 +32,6 @@ def generate_sensor_frame(dt: datetime, device_id: str = DEFAULT_DEVICE_ID, is_l
     base_hum = 52.0 - (temp_cycle * 18.0) + random.uniform(-0.8, 0.8)
     hum_pct = round(max(20.0, min(95.0, base_hum)), 1)
 
-    # Light intensity (% illuminance) from LDR Photoresistor:
-    # 0% at night (pitch dark), climbs at dawn (6:00), peaks at solar noon (13:00) at 85-98%
-    if 5.5 <= hour <= 19.5:
-        light_curve = math.sin((hour - 5.5) * math.pi / 14.0)
-        base_light = (light_curve * 92.0) + random.uniform(-2.0, 2.0)
-        light_pct = round(max(0.0, min(100.0, base_light)), 1)
-    else:
-        light_pct = round(max(0.0, random.uniform(0.0, 1.5)), 1) # Low ambient starlight/room glow
-
     # Optional physical metrics
     base_press = 1013.25 + (math.cos(hour * math.pi / 12.0) * 3.5) + random.uniform(-0.2, 0.2)
     pressure = round(base_press, 1)
@@ -50,7 +41,6 @@ def generate_sensor_frame(dt: datetime, device_id: str = DEFAULT_DEVICE_ID, is_l
         "device_id": device_id,
         "temperature": temp_c,
         "humidity": hum_pct,
-        "sun_activity": light_pct,
         "pressure": pressure,
         "wind_speed": wind_speed,
         "batt_voltage": 3.30,
@@ -86,7 +76,7 @@ def run_live_streaming(server_url: str, api_key: str, interval: float = 2.0, cou
     print("==================================================================")
     print(" Smart Home Weather Station — Real-Time Telemetry Streamer        ")
     print(f" Target Server : {server_url}")
-    print(f" Direct Sensors: DHT11 (Temp/Hum) + Photoresistor LDR (Light)")
+    print(f" Direct Sensors: DHT11 (Temperature & Relative Humidity)")
     print(f" Stream Rate   : Every {interval}s (Real-Time Mode)")
     print("==================================================================")
 
@@ -104,7 +94,7 @@ def run_live_streaming(server_url: str, api_key: str, interval: float = 2.0, cou
 
             sent += 1
             if status in (200, 201):
-                print(f"[LIVE STREAM #{sent:04d}] Status: {status} | Latency: {latency:5.1f}ms | Temp: {frame['temperature']:5.2f}°C | Hum: {frame['humidity']:4.1f}% | Light (LDR): {frame['sun_activity']:4.1f}%")
+                print(f"[LIVE STREAM #{sent:04d}] Status: {status} | Latency: {latency:5.1f}ms | Temp: {frame['temperature']:5.2f}°C | Hum: {frame['humidity']:4.1f}%")
             else:
                 print(f"[STREAM ERROR #{sent:04d}] Status: {status} | Error: {resp}")
 

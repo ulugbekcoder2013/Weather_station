@@ -117,7 +117,6 @@ def _build_ai_prompt(reading_dict: dict) -> str:
     temp_c = reading_dict.get('temperature', 22.0)
     temp_f = round(temp_c * 9/5 + 32, 1)
     humidity = reading_dict.get('humidity', 50.0)
-    sun_activity = reading_dict.get('sun_activity', 50.0)
     pressure = reading_dict.get('pressure', 1013.25)
     wind_speed = reading_dict.get('wind_speed', 0.0)
     rain_detected = reading_dict.get('rain_detected', False)
@@ -128,24 +127,23 @@ def _build_ai_prompt(reading_dict: dict) -> str:
 Analyze the following physical sensor telemetry from our smart home weather station:
 - Temperature: {temp_c}°C ({temp_f}°F)
 - Relative Humidity: {humidity}%
-- Solar Irradiance / Light Intensity (LDR Photoresistor): {sun_activity}%
 - Barometric Air Pressure: {pressure} hPa
 - Wind Velocity: {wind_speed} km/h
 - Rain Detection Sensor: {"RAIN DETECTED (Precipitation Active)" if rain_detected else "No Rain (Dry Surface)"}
 - Current Local Time: {time_str} ({time_context})
 
 CRITICAL INSTRUCTION:
-Your analysis, headline, summary, and clothing recommendation MUST explicitly incorporate the current time of day ({time_context} at {time_str}).
+Your analysis, headline, summary, and clothing recommendation MUST explicitly incorporate the current time of day ({time_context} at {time_str}) and sensor metrics.
 - If it is Nighttime or Midnight ({time_str}), analyze nocturnal climate, nocturnal temperature comfort, and sleep/evening clothing.
 - If it is Dawn / Morning, analyze morning air, sunrise transition, and morning attire.
-- If it is Midday or Afternoon, analyze peak daytime sun, UV considerations, and outdoor activities.
+- If it is Midday or Afternoon, analyze daytime atmosphere, thermal comfort, and outdoor activities.
 - If it is Sunset / Dusk, analyze cooling dusk breezes and evening wear.
 
 Valid 'weather_type' values MUST be one of:
-- "sunny" (daytime clear sky / high light)
-- "sunset" (golden hour dusk, low sun, warm sky)
-- "nighttime" (night hours, moonlit, dark ambient)
-- "sunrise" (dawn, rising morning sun)
+- "sunny" (daytime clear sky)
+- "sunset" (golden hour dusk, evening sky)
+- "nighttime" (night hours, moonlit / nocturnal)
+- "sunrise" (dawn, early morning transition)
 - "rain" (active rain or high humidity precipitation)
 - "thunderstorm" (violent weather, pressure drop + rain)
 - "snow" (sub-zero temperatures below 2°C with moisture)
@@ -260,10 +258,9 @@ def perform_ai_analysis(reading_dict: dict) -> dict:
     return heuristic_res
 
 def _heuristic_weather_type(reading: dict) -> str:
-    """Calculates weather condition type based on physical sensor rules and time of day."""
+    """Calculates weather condition type based on physical sensor rules and astronomical time logic."""
     is_rain = reading.get('rain_detected', False)
     temp = reading.get('temperature', 20.0)
-    sun = reading.get('sun_activity', 50.0)
     hum = reading.get('humidity', 50.0)
 
     _, hour, _, _ = _get_time_context(reading)
@@ -274,20 +271,16 @@ def _heuristic_weather_type(reading: dict) -> str:
         return "rain"
     if temp <= 1.5 and hum > 70:
         return "snow"
-    if hum > 88 and sun < 35:
+    if hum >= 90:
         return "foggy"
-    if sun >= 60:
-        return "sunny"
-    if sun < 15:
-        return "nighttime"
 
-    # Time-of-day astronomical mapping
+    # Astronomical time-of-day mapping
     if hour < 5 or hour >= 22:
         return "nighttime"
     if 5 <= hour < 8:
-        return "sunrise" if sun < 60 else "sunny"
+        return "sunrise"
     if 19 <= hour < 22:
-        return "sunset" if sun < 60 else "sunny"
+        return "sunset"
 
     # Daytime (08:00 - 19:00)
     return "sunny"
@@ -297,7 +290,6 @@ def _heuristic_fallback(reading: dict) -> dict:
     wtype = _heuristic_weather_type(reading)
     temp = reading.get('temperature', 22.0)
     hum = reading.get('humidity', 50.0)
-    sun = reading.get('sun_activity', 50.0)
     
     local_dt, _, time_str, time_context = _get_time_context(reading)
 
@@ -339,13 +331,13 @@ def _heuristic_fallback(reading: dict) -> dict:
         if temp >= 28.0:
             label = "WARM SUN"
             headline = f"Bright Solar Radiance ({time_str})"
-            summary = f"At {time_str} ({time_context}), radiant sunshine ({sun:.1f}%) warms ambient levels to {temp:.1f}°C with {hum:.1f}% humidity."
+            summary = f"At {time_str} ({time_context}), daylight conditions warm ambient levels to {temp:.1f}°C with {hum:.1f}% humidity."
             advice = "Breathable summer cottons, sunglasses, and UV skin protection recommended."
             comfort = 84
         else:
             label = "IT'S SUNNY"
             headline = f"Optimal Daylight Climate ({time_str})"
-            summary = f"At {time_str} ({time_context}), clear radiant daylight ({sun:.1f}% light) with balanced {temp:.1f}°C and {hum:.1f}% humidity."
+            summary = f"At {time_str} ({time_context}), clear radiant daylight with balanced {temp:.1f}°C and {hum:.1f}% humidity."
             advice = "Comfortable lightweight daytime attire and sunglasses for outdoor activities."
             comfort = 92
 

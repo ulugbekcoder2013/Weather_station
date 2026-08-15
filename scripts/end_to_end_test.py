@@ -144,20 +144,19 @@ def run_all_tests():
             print(f"  [FAIL] Should be 403, got: {status}")
             failed += 1
 
-        # 3. Direct ESP32 Telemetry Ingestion (DHT11 + Photoresistor LDR)
-        print("\n--- Test 3: Direct Sensor Ingestion (DHT11 & LDR) ---")
+        # 3. Direct ESP32 Telemetry Ingestion (DHT11 Digital)
+        print("\n--- Test 3: Direct Sensor Ingestion (DHT11) ---")
         payload = {
             "device_id": "WS-001",
             "temperature": 26.45,
             "humidity": 44.8,
-            "sun_activity": 82.3,
             "batt_voltage": 3.30,
             "rain_detected": False
         }
         status, res, lat = http_request("/api/weather", method="POST", data=payload, headers={"X-API-Key": TEST_API_KEY})
         if status == 201 and res.get("success") is True:
             data = res.get("data", {})
-            print(f"  [PASS] Ingested in {lat:.2f}ms. ID: {res.get('id')}, Temp: {data.get('temperature')}°C, Hum: {data.get('humidity')}%, Light: {data.get('sun_activity')}%")
+            print(f"  [PASS] Ingested in {lat:.2f}ms. ID: {res.get('id')}, Temp: {data.get('temperature')}°C, Hum: {data.get('humidity')}%")
             passed += 1
         else:
             print(f"  [FAIL] Ingestion failed: {status}, {res}")

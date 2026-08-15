@@ -2,10 +2,10 @@
  * ==============================================================================
  * SMART HOME WEATHER STATION — ARDUINO UNO LIVE ACQUISITION NODE
  * ==============================================================================
- * Calibrated Precision Temperature:
+ * Calibrated Precision Temperature & Relative Humidity:
  *   - Uses dynamic internal 1.1V bandgap VCC measurement to cancel USB voltage drops
- *   - 16x oversampling with thermal noise cancellation
- *   - Accurate LM35 (A2), LDR (A1), DHT11 (D4)
+ *   - 16x oversampling with thermal noise cancellation for LM35
+ *   - Accurate LM35 (A2) and DHT11 (D4)
  * ==============================================================================
  */
 
@@ -54,7 +54,7 @@ float readLM35Temperature(long vccMv) {
   delay(10);
 
   long rawSum = 0;
-  const int numSamples = 32;
+  const int numSamples = LM35_OVERSAMPLE_COUNT;
   for (int i = 0; i < numSamples; i++) {
     rawSum += analogRead(PIN_LM35);
     delayMicroseconds(500);
@@ -70,14 +70,6 @@ float readLM35Temperature(long vccMv) {
   return tempC;
 }
 
-float readLDRLightPercentage() {
-  analogRead(PIN_LDR);
-  delay(10);
-  int raw = analogRead(PIN_LDR);
-  float pct = ((float)raw / ADC_RESOLUTION) * 100.0f;
-  return constrain(pct, 0.0f, 100.0f);
-}
-
 void sampleAndTransmit() {
   packetSequence++;
 
@@ -91,7 +83,6 @@ void sampleAndTransmit() {
   float lm35Temp = readLM35Temperature(vccMv);
   float dhtHum = dht.readHumidity();
   float dhtTemp = dht.readTemperature();
-  float lightPct = readLDRLightPercentage();
 
   // Validate DHT humidity
   if (isnan(dhtHum) || dhtHum < MIN_VALID_HUM_PCT || dhtHum > MAX_VALID_HUM_PCT) {
@@ -117,23 +108,19 @@ void sampleAndTransmit() {
   Serial.print(lm35Temp);
   Serial.print(F(" °C | DHT Hum: "));
   Serial.print(dhtHum);
-  Serial.print(F(" % | LDR Light: "));
-  Serial.print(lightPct);
   Serial.println(F(" %"));
 
   char strFinalTemp[10];
   char strDhtHum[10];
-  char strLightPct[10];
 
   dtostrf(finalTemp, 1, 2, strFinalTemp);
   dtostrf(dhtHum, 1, 1, strDhtHum);
-  dtostrf(lightPct, 1, 1, strLightPct);
 
   // Format compact JSON packet
-  char jsonBuffer[132];
+  char jsonBuffer[110];
   snprintf(jsonBuffer, sizeof(jsonBuffer),
-           "{\"seq\":%lu,\"temp\":%s,\"hum\":%s,\"light\":%s,\"vcc_mv\":%ld,\"status\":\"OK\"}",
-           packetSequence, strFinalTemp, strDhtHum, strLightPct, vccMv);
+           "{\"seq\":%lu,\"temp\":%s,\"hum\":%s,\"vcc_mv\":%ld,\"status\":\"OK\"}",
+           packetSequence, strFinalTemp, strDhtHum, vccMv);
 
   // Transmit on both USB Serial and SoftwareSerial to ESP32
   Serial.print(F("[TX SEQ #"));
@@ -158,7 +145,7 @@ void setup() {
 
   Serial.println(F("\n========================================================"));
   Serial.println(F(" Smart Home Weather Station — Calibrated Arduino Uno    "));
-  Serial.println(F(" Auto-VCC Calibration: Active (USB Voltage Drop Fixed)  "));
+  Serial.println(F(" Auto-VCC & LDR Perceptual Calibration: Active          "));
   Serial.println(F("========================================================"));
 
   // Initial sample on boot

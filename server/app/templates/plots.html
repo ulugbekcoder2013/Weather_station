@@ -16,7 +16,7 @@
             <p class="mt-1 text-xs text-slate-400 flex flex-wrap items-center gap-2">
                 <span>Station: <strong class="text-slate-200">WS-001 (Direct ESP32)</strong></span>
                 <span>&bull;</span>
-                <span>Sensors: <strong class="text-cyan-400">DHT11 (Temp/Hum) + Photoresistor LDR (Light)</strong></span>
+                <span>Sensors: <strong class="text-cyan-400">DHT11 Digital (Temp/Hum)</strong></span>
                 <span>&bull;</span>
                 <span>Updated: <span id="lastUpdatedTime" class="text-slate-200 mono-num">--:--:--</span></span>
                 <span id="lastUpdatedRelative" class="rounded bg-slate-800/80 px-1.5 py-0.5 text-[10px] font-bold text-slate-300 border border-white/5">--</span>
@@ -155,18 +155,17 @@
             </div>
         </div>
 
-        <!-- Sunlight / Light Intensity (Photoresistor LDR) -->
+        <!-- Solar / Astronomical Period (Time Logic) -->
         <div class="glass-panel glass-panel-glow rounded-2xl p-6 transition-all duration-300 relative overflow-hidden group">
             <div class="flex items-center justify-between">
-                <span class="text-xs font-bold uppercase tracking-wider text-emerald-400">Light Intensity &middot; Photoresistor LDR</span>
-                <span id="lightConditionBadge" class="rounded-md bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-500/20">SUNNY</span>
+                <span class="text-xs font-bold uppercase tracking-wider text-emerald-400">Daylight &middot; Astronomical Time</span>
+                <span id="lightConditionBadge" class="rounded-md bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-500/20">DAYLIGHT</span>
             </div>
             <div class="mt-4 flex items-baseline gap-2">
-                <span id="cardLight" class="text-5xl font-black tracking-tight text-white mono-num">--</span>
-                <span class="text-2xl font-bold text-emerald-400">%</span>
+                <span id="cardLight" class="text-3xl font-black tracking-tight text-white mono-num">Daylight</span>
             </div>
             <p id="lightStatusText" class="mt-1 text-xs text-slate-400">
-                12-bit ADC oversampled with EMA smoothing
+                Synchronized NTP astronomical diurnal logic
             </p>
             <div class="mt-4 pt-3 border-t border-white/5 grid grid-cols-3 gap-2 text-[11px] mono-num text-slate-400">
                 <div>Min: <span id="lightMin" class="font-bold text-slate-200">--</span></div>
@@ -261,7 +260,7 @@
                 <div class="flex items-center justify-between mb-4">
                     <span class="text-sm font-bold text-slate-200 flex items-center gap-2">
                         <span class="h-2.5 w-2.5 rounded-full bg-emerald-400"></span>
-                        Sunlight &amp; Ambient Light (Photoresistor LDR)
+                        Solar Period &amp; Diurnal Index
                     </span>
                     <span id="lightCurrentChartLabel" class="text-xs font-bold text-emerald-400 mono-num">-- %</span>
                 </div>
@@ -467,7 +466,7 @@
             humBadge.className = 'rounded-md bg-cyan-500/10 px-2 py-0.5 text-[10px] font-bold text-cyan-400 border border-cyan-500/20';
         }
 
-        // Light Intensity (Photoresistor LDR)
+        // Solar / Astronomical Time Stage
         const lightVal = latest.sun_activity !== undefined ? latest.sun_activity : (latest.light_pct !== undefined ? latest.light_pct : 0.0);
         document.getElementById('cardLight').textContent = formatNumber(lightVal);
         document.getElementById('lightCurrentChartLabel').textContent = `${formatNumber(lightVal)} %`;
@@ -478,15 +477,21 @@
         document.getElementById('lightMax').textContent = `${lightStats.max}%`;
 
         const lightBadge = document.getElementById('lightConditionBadge');
-        if (lightVal > 70) {
-            lightBadge.textContent = 'BRIGHT SUN';
+        if (lightVal >= 85) {
+            lightBadge.textContent = 'INTENSE SUN';
+            lightBadge.className = 'rounded-md bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-300 border border-amber-500/40 shadow-sm shadow-amber-500/20';
+        } else if (lightVal >= 65) {
+            lightBadge.textContent = 'BRIGHT DAY';
             lightBadge.className = 'rounded-md bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-400 border border-amber-500/20';
-        } else if (lightVal < 25) {
-            lightBadge.textContent = 'LOW LIGHT';
-            lightBadge.className = 'rounded-md bg-slate-500/10 px-2 py-0.5 text-[10px] font-bold text-slate-400 border border-slate-500/20';
-        } else {
+        } else if (lightVal >= 25) {
             lightBadge.textContent = 'AMBIENT';
             lightBadge.className = 'rounded-md bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-500/20';
+        } else if (lightVal >= 5) {
+            lightBadge.textContent = 'DIM / TWILIGHT';
+            lightBadge.className = 'rounded-md bg-indigo-500/10 px-2 py-0.5 text-[10px] font-bold text-indigo-300 border border-indigo-500/20';
+        } else {
+            lightBadge.textContent = 'NIGHT / DARK';
+            lightBadge.className = 'rounded-md bg-slate-500/10 px-2 py-0.5 text-[10px] font-bold text-slate-400 border border-slate-500/20';
         }
 
         // Auxiliary metrics & Pressure Trend

@@ -19,7 +19,7 @@ class WeatherData(Base):
     device_id = Column(String(64), nullable=False, default="WS-001", index=True)
     temperature = Column(Float, nullable=False) # DHT11 Temperature in °C
     humidity = Column(Float, nullable=False)    # DHT11 Relative Humidity in %
-    sun_activity = Column(Float, nullable=False, default=0.0) # LDR Photoresistor Light %
+    sun_activity = Column(Float, nullable=True, default=None) # Optional legacy column
     wind_speed = Column(Float, nullable=True)
     pressure = Column(Float, nullable=True)
     batt_voltage = Column(Float, nullable=True)
@@ -32,11 +32,33 @@ class WeatherData(Base):
 
     def to_dict(self) -> dict:
         ts = self.timestamp or utc_now()
+        local_ts = ts + timedelta(hours=5)
         time_iso = ts.strftime("%Y-%m-%dT%H:%M:%SZ")
         time_str = ts.strftime("%Y-%m-%d %H:%M:%S")
 
-        light_val = round(self.sun_activity, 1) if self.sun_activity is not None else 0.0
-        light_cond = "Bright Sunlight" if light_val > 70 else ("Dim / Low Light" if light_val < 25 else "Moderate Light")
+        hour = local_ts.hour
+        if hour < 5:
+            time_of_day = "Late Night"
+            light_cond = "Night"
+        elif hour < 8:
+            time_of_day = "Sunrise / Dawn"
+            light_cond = "Dawn"
+        elif hour < 12:
+            time_of_day = "Morning"
+            light_cond = "Daylight"
+        elif hour < 17:
+            time_of_day = "Midday / Afternoon"
+            light_cond = "Daylight"
+        elif hour < 20:
+            time_of_day = "Sunset / Dusk"
+            light_cond = "Dusk"
+        elif hour < 22:
+            time_of_day = "Evening Twilight"
+            light_cond = "Twilight"
+        else:
+            time_of_day = "Nighttime"
+            light_cond = "Night"
+
         hum_val = round(self.humidity, 1) if self.humidity is not None else 0.0
         hum_cond = "Humid" if hum_val > 65 else ("Dry" if hum_val < 30 else "Optimal Comfort")
         temp_val = round(self.temperature, 2) if self.temperature is not None else 0.0
@@ -48,13 +70,14 @@ class WeatherData(Base):
             "temperature_c": temp_val,
             "humidity": hum_val,
             "humidity_pct": hum_val,
-            "sun_activity": light_val,
-            "light_pct": light_val,
+            "sun_activity": None,
+            "light_pct": None,
+            "time_of_day": time_of_day,
             "wind_speed": round(self.wind_speed * 3.6, 2) if self.wind_speed is not None else None,
             "pressure": round(self.pressure, 1) if self.pressure is not None else None,
             "batt_voltage": round(self.batt_voltage, 2) if self.batt_voltage is not None else None,
             "rain_detected": bool(self.rain_detected) if self.rain_detected is not None else False,
-            "sensor_source": "DHT11 (Temp/Hum) + LDR (Light)",
+            "sensor_source": "DHT11 (Temp/Hum)",
             "recorded_at": time_str,
             "timestamp": time_iso,
             "light_condition": light_cond,

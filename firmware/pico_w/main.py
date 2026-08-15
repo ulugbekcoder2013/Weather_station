@@ -65,7 +65,6 @@ i2c = I2C(1, scl=Pin(3), sda=Pin(2))
 bmp180 = BMP180(i2c=i2c)
 dht22 = dht.DHT22(Pin(4))
 wind_sensor = Pin(5, Pin.IN, Pin.PULL_UP)
-sun_sensor = ADC(Pin(27))
 rain_sensor = ADC(Pin(26))
 battery_sensor = ADC(29)  # Internal VSYS voltage monitor
 
@@ -131,7 +130,6 @@ def collect_sensor_data():
         "humidity": humidity,
         "pressure": pressure,
         "wind_speed": wind_speed,
-        "sun_activity": round((sun_sensor.read_u16() / 65535.0) * 100.0, 1),
         "batt_voltage": batt_voltage,
         "rain_detected": rain_sensor.read_u16() > 10000  
     }

@@ -10,7 +10,7 @@
     <string name="sensor_dht11_temp">DHT11 Temperature</string>
     <string name="sensor_lm35">DHT11 Temperature</string>
     <string name="sensor_dht11">DHT11 Humidity</string>
-    <string name="sensor_ldr">LDR Ambient Light</string>
+    <string name="sensor_ldr">Diurnal Stage</string>
 
     <!-- Units -->
     <string name="unit_celsius">°C</string>

@@ -552,8 +552,8 @@ fun SensorDetailCard(
                 )
                 SensorPill(
                     icon = "☀️",
-                    label = "LDR",
-                    value = String.format(Locale.US, "%.0f%%", reading.lightPct),
+                    label = "Quyosh",
+                    value = reading.getTimeOfDayLabel(),
                     bgColor = Color(0xFFFEF9C3),
                     textColor = Color(0xFFCA8A04)
                 )

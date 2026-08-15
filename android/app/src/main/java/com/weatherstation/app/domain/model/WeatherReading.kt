@@ -83,11 +83,7 @@ data class WeatherReading(
     val lm35VoltageMv: Float
         get() = temperatureC * 10.0f
 
-    // 4. Raw LDR Photoresistor ADC approximation (0 to 4095 on 12-bit ADC)
-    val ldrRawAdc: Int
-        get() = ((lightPct / 100.0f) * 4095.0f).toInt().coerceIn(0, 4095)
-
-    // 5. Indoor Comfort Index (Uzbek)
+    // 4. Indoor Comfort Index (Uzbek)
     val comfortLevel: String
         get() = when {
             humidityPct < 30f -> "Quruq havo • Suv iching"
@@ -98,7 +94,7 @@ data class WeatherReading(
             else -> "Yoqimli havo"
         }
 
-    // 6. Visual state based only on installed sensors; this is not a forecast.
+    // 5. Visual state based only on installed sensors & time logic
     val effectiveWeatherType: String
         get() = when {
             rainDetected == true -> "rain"
@@ -106,35 +102,29 @@ data class WeatherReading(
             else -> "nighttime"
         }
 
-    // 7. Effective Vertical Editorial Label (Uzbek)
+    // 6. Effective Vertical Editorial Label (Uzbek)
     val effectiveVerticalLabel: String
         get() = when (effectiveWeatherType) {
             "rain" -> "YOMG'IR SENSORI"
-            "nighttime" -> "TUNGI YORITISH"
-            else -> "JONLI SENSORLAR"
+            "nighttime" -> "TUNGI VAQT"
+            else -> "KUNDUZGI VAQT"
         }
 
-    // 8. Dynamic Day / Night determination based on BOTH Photoresistor & Current Time
+    // 7. Dynamic Day / Night determination based purely on current clock time
     fun isDaytime(customHour: Int? = null): Boolean {
         val currentHour = customHour ?: Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-        val isClockDay = currentHour in 6..19
-        return if (isClockDay) {
-            lightPct >= 18.0f
-        } else {
-            lightPct >= 65.0f
-        }
+        return currentHour in 6..19
     }
 
-    // 9. Time of day classification (Uzbek)
+    // 8. Time of day classification (Uzbek)
     fun getTimeOfDayLabel(customHour: Int? = null): String {
         val currentHour = customHour ?: Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-        val isDay = isDaytime(currentHour)
-        return when {
-            isDay && currentHour in 6..8 -> "Tonggi vaqt"
-            isDay && currentHour in 9..16 -> "Yorug' kunduz"
-            isDay && currentHour in 17..19 -> "Kun botishi"
-            !isDay && (currentHour >= 22 || currentHour <= 4) -> "Tungi vaqt"
-            else -> "Oqshom"
+        return when (currentHour) {
+            in 5..8 -> "Tonggi vaqt"
+            in 9..17 -> "Yorug' kunduz"
+            in 18..20 -> "Kun botishi"
+            in 21..22 -> "Oqshom"
+            else -> "Tungi vaqt"
         }
     }
 }
