@@ -541,7 +541,7 @@ async def get_latest_weather(request: Request, device_id: Optional[str] = None, 
     except Exception:
         sec_ago = int(time.time() - _latest_telemetry_cache.get("last_updated_epoch", time.time()))
 
-    is_online = sec_ago < 45
+    is_online = sec_ago < 240  # 4 minutes threshold (accommodates 2-minute ESP32 deep sleep)
 
     res = {
         "success": True,
@@ -550,7 +550,7 @@ async def get_latest_weather(request: Request, device_id: Optional[str] = None, 
         "device_status": {
             "online": is_online,
             "last_seen_sec_ago": sec_ago,
-            "health": "Real-Time Live Streaming" if is_online else f"Inactive ({sec_ago}s ago)"
+            "health": "Active Sensor Node" if is_online else f"Inactive ({sec_ago}s ago)"
         }
     }
     res.update(cached_data)
